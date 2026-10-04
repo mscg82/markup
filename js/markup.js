@@ -1,6 +1,10 @@
 (()=>{
 const $=id=>document.getElementById(id);
-const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
+const cv=$('cv'),stage=$('stage');
+// alpha:false and desynchronized:true lower compositing cost and input latency on Chrome.
+const ctx=cv.getContext('2d',{alpha:false,desynchronized:true});
+let rect=cv.getBoundingClientRect();           // cached: avoids a layout read on every pointer event
+const dpr=()=>Math.min(devicePixelRatio||1,2);   // cap the backing store size on high-DPI tablets
 let bg=null,L=null,lc=null,ops=[],tool='pen',s=1,ox=0,oy=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
 const ptrs=new Map();let pinch=null,last=null;
@@ -26,22 +30,35 @@ function replay(){lc.clearRect(0,0,L.width,L.height);ops.forEach(o=>drawOp(lc,o)
 
 /* ---------- view ---------- */
 function resize(){
-  const r=stage.getBoundingClientRect(),d=devicePixelRatio||1;
-  cv.width=Math.round(r.width*d);cv.height=Math.round(r.height*d);render();
+  rect=cv.getBoundingClientRect();const d=dpr();
+  cv.width=Math.round(rect.width*d);cv.height=Math.round(rect.height*d);paint();
 }
-function render(){
-  const d=devicePixelRatio||1;
+// Repaint at most once per animation frame, however many pointer events arrive.
+let raf=0,interacting=false,idleT=0;
+function render(){if(!raf)raf=requestAnimationFrame(()=>{raf=0;paint()})}
+// While the user draws/pans/zooms use cheap image scaling, then repaint in high quality when idle.
+function markBusy(){
+  interacting=true;clearTimeout(idleT);
+  idleT=setTimeout(()=>{interacting=false;render()},200);
+}
+function paint(){
+  const d=dpr();
   ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#1f2326';ctx.fillRect(0,0,cv.width,cv.height);
   if(!bg)return;
   ctx.setTransform(d*s,0,0,d*s,d*ox,d*oy);
-  ctx.imageSmoothingQuality='high';
-  ctx.drawImage(bg,0,0);ctx.drawImage(L,0,0);
+  ctx.imageSmoothingQuality=interacting?'low':'high';
+  // draw only the part of the image that is visible
+  const x0=Math.max(0,Math.floor(-ox/s)),y0=Math.max(0,Math.floor(-oy/s));
+  const x1=Math.min(bg.width,Math.ceil((rect.width-ox)/s)),y1=Math.min(bg.height,Math.ceil((rect.height-oy)/s));
+  if(x1>x0&&y1>y0){
+    const w=x1-x0,h=y1-y0;
+    ctx.drawImage(bg,x0,y0,w,h,x0,y0,w,h);ctx.drawImage(L,x0,y0,w,h,x0,y0,w,h);
+  }
   if(cur&&!(cur.t==='pen'||cur.t==='erase'))drawOp(ctx,cur);
-  ctx.setTransform(d*s,0,0,d*s,d*ox,d*oy);
   ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=1/s;ctx.strokeRect(0,0,bg.width,bg.height);
 }
 function fit(){
-  if(!bg)return;const r=stage.getBoundingClientRect();
+  if(!bg)return;const r=rect;
   s=Math.min(r.width/bg.width,r.height/bg.height)*.96;
   ox=(r.width-bg.width*s)/2;oy=(r.height-bg.height*s)/2;render();
 }
@@ -49,8 +66,8 @@ function zoomAt(f,px,py){
   const n=Math.min(40,Math.max(.05,s*f));
   ox=px-(px-ox)/s*n;oy=py-(py-oy)/s*n;s=n;render();
 }
-const toImg=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left-ox)/s,(e.clientY-r.top-oy)/s]};
-const local=e=>{const r=cv.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]};
+const toImg=e=>[(e.clientX-rect.left-ox)/s,(e.clientY-rect.top-oy)/s];
+const local=e=>[e.clientX-rect.left,e.clientY-rect.top];
 
 /* ---------- pointer handling ---------- */
 cv.addEventListener('pointerdown',e=>{
@@ -67,17 +84,21 @@ cv.addEventListener('pointerdown',e=>{
 cv.addEventListener('pointermove',e=>{
   if(!ptrs.has(e.pointerId))return;
   ptrs.set(e.pointerId,local(e));
+  markBusy();
   if(ptrs.size===2&&pinch){updatePinch();return}
   if(panning){const q=local(e);ox+=q[0]-last[0];oy+=q[1]-last[1];last=q;render();return}
   if(!cur)return;
   const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];
-  for(const ev of (evs.length?evs:[e])){
-    const p=toImg(ev);
-    if(cur.t==='pen'||cur.t==='erase'){
-      const prev=cur.p[cur.p.length-1];cur.p.push(p);
-      drawOp(lc,{...cur,p:[prev,p]});
-    }else cur.b=p;
-  }
+  if(cur.t==='pen'||cur.t==='erase'){
+    const min2=(0.8/s)**2;                       // ignore moves smaller than ~0.8 screen px
+    let prev=cur.p[cur.p.length-1];const seg=[prev];
+    for(const ev of (evs.length?evs:[e])){
+      const p=toImg(ev);
+      if((p[0]-prev[0])**2+(p[1]-prev[1])**2<min2)continue;
+      cur.p.push(p);seg.push(p);prev=p;
+    }
+    if(seg.length>1)drawOp(lc,{t:cur.t,c:cur.c,w:cur.w,p:seg});   // one stroke call per event
+  }else cur.b=toImg(e);
   render();
 });
 function end(e){
@@ -86,7 +107,7 @@ function end(e){
   if(cur&&e.type==='pointerup'){
     const o=cur;cur=null;
     const degenerate=!o.p&&o.a[0]===o.b[0]&&o.a[1]===o.b[1];
-    if(!degenerate){ops.push(o);if(o.t==='pen'||o.t==='erase'){}else drawOp(lc,o);persist()}
+    if(!degenerate){ops.push(o);if(o.t==='pen'||o.t==='erase'){}else drawOp(lc,o);persistSoon()}
     else replay();
     ui();render();
   }else if(cur)cancelCur();
@@ -120,7 +141,7 @@ function updatePinch(){
   s=n;pinch.d=c.d;render();
 }
 cv.addEventListener('wheel',e=>{
-  e.preventDefault();const q=local(e);zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)),q[0],q[1]);
+  e.preventDefault();markBusy();const q=local(e);zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)),q[0],q[1]);
 },{passive:false});
 
 /* ---------- UI ---------- */
@@ -182,7 +203,7 @@ function clearWork(all){
   b.addEventListener('contextmenu',e=>e.preventDefault());
   b.addEventListener('click',e=>{if(e.detail===0&&!b.disabled)clearWork(false)}); // keyboard
 })();
-$('undo').onclick=()=>{if(!ops.length)return;ops.pop();replay();persist();ui();render()};
+$('undo').onclick=()=>{if(!ops.length)return;ops.pop();replay();persistSoon();ui();render()};
 $('zi').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(1.25,r.width/2,r.height/2)};
 $('zo').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(.8,r.width/2,r.height/2)};
 $('fit').onclick=fit;
@@ -214,6 +235,13 @@ $('file').onchange=e=>{
 };
 
 /* ---------- local storage ---------- */
+// Writing the whole history to localStorage is synchronous and grows with the drawing,
+// so after a stroke it is deferred until the user pauses (and flushed when the page is hidden).
+let saveT=0;
+function persistSoon(){clearTimeout(saveT);saveT=setTimeout(flushSave,600)}
+function flushSave(){if(!saveT)return;clearTimeout(saveT);saveT=0;if(bg)persist()}
+addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushSave()});
+addEventListener('pagehide',flushSave);
 function persist(withBg){
   try{
     if(withBg)localStorage.setItem('markup.bg',bg.toDataURL('image/jpeg',.88));

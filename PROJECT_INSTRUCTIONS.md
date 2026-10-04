@@ -14,7 +14,7 @@ index.html (markup), css/style.css, js/markup.js (all app logic), sw.js (service
 - Clear button: click = clear drawing, long press (700 ms) = also remove background; both use confirm() and are not undoable.
 - Export: merge background + layer at full resolution to JPEG.
 - localStorage keys: markup.bg (JPEG data URL), markup.ops (operations JSON), markup.prefs (color, draw width, erase width). Always wrap storage access in try/catch and warn the user if saving fails.
-- Offline: sw.js uses stale-while-revalidate. When any cached file changes or is added, add it to ASSETS and bump CACHE (currently markup-v6).
+- Offline: sw.js uses stale-while-revalidate. When any cached file changes or is added, add it to ASSETS and bump CACHE (currently markup-v7).
 - Icons: Firefox Android ignores SVG for shortcuts, so keep raster icons and favicon.ico declared before the SVG in <head>.
 
 ## Working style

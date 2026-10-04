@@ -52,7 +52,7 @@ Upload all the files and folders to any static host (GitHub Pages, Netlify, Ngin
 
 - Serve over **HTTPS** so the service worker and the install option work (`localhost` is also fine for testing).
 - Serve `manifest.webmanifest` as `application/manifest+json` (or `application/json`).
-- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v7`) so installed copies drop the old files.
+- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v8`) so installed copies drop the old files.
 
 ### GitHub Pages
 
