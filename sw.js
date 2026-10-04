@@ -1,5 +1,5 @@
 // Bump CACHE when you deploy a new version so clients drop old files.
-const CACHE = 'markup-v3';
+const CACHE = 'markup-v4';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './favicon.svg',
   './icon-48.png', './icon-96.png', './icon-144.png', './favicon.ico', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'

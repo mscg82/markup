@@ -27,6 +27,14 @@ button:disabled{opacity:.4;cursor:default}
 button:focus-visible,input:focus-visible,label.btn:focus-within{outline:2px solid var(--acc);outline-offset:1px}
 input[type=color]{width:38px;height:36px;padding:2px;border:1px solid var(--line);border-radius:6px;background:#394147}
 input[type=range]{width:110px;accent-color:var(--acc)}
+.menu{position:relative}
+#menuList{position:absolute;right:0;top:calc(100% + 4px);z-index:20;min-width:170px;background:var(--bar);border:1px solid var(--line);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+#menuList[hidden]{display:none}
+#menuList button{background:transparent;border:0;text-align:left;width:100%}
+#menuList button:hover:not(:disabled),#menuList button:focus-visible{background:#445057}
+.gw{flex:1 1 300px}
+.gw input[type=range]{flex:1;width:auto;min-width:110px}
+button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 #clear{background-image:linear-gradient(#c0392b,#c0392b);background-repeat:no-repeat;background-size:0% 100%;transition:background-size 0s;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 #clear.holding{background-size:100% 100%;transition:background-size .7s linear}
 .sw{display:grid;grid-template-columns:repeat(8,22px);gap:3px}
@@ -42,30 +50,38 @@ canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;displa
 <body>
 <header>
   <div class="g">
-    <label class="btn">Open image<input id="file" type="file" accept="image/*" hidden></label>
-    <button id="undo" disabled>Undo</button>
+    <label class="btn" title="Open an image to use as background">Open image<input id="file" type="file" accept="image/*" hidden></label>
+    <button id="undo" disabled title="Undo last operation (Ctrl+Z)">Undo</button>
     <button id="clear" disabled title="Click: clear drawing. Hold: also remove the image.">Clear</button>
   </div>
   <div class="g" id="tools" role="group" aria-label="Tools">
-    <button data-t="pen" aria-pressed="true">Pen</button>
-    <button data-t="line" aria-pressed="false">Line</button>
-    <button data-t="rect" aria-pressed="false">Rectangle</button>
-    <button data-t="circle" aria-pressed="false">Circle</button>
-    <button data-t="erase" aria-pressed="false">Eraser</button>
-    <button data-t="pan" aria-pressed="false">Move</button>
+    <button data-t="pen" aria-pressed="true" title="Pen – freehand drawing" aria-label="Pen"><svg viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button>
+    <button data-t="line" aria-pressed="false" title="Line – straight line" aria-label="Line"><svg viewBox="0 0 24 24"><path d="M5 19L19 5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="5" r="1.5"/></svg></button>
+    <button data-t="rect" aria-pressed="false" title="Rectangle – drag from corner to corner" aria-label="Rectangle"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1"/></svg></button>
+    <button data-t="circle" aria-pressed="false" title="Circle – drag from the center outward" aria-label="Circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg></button>
+    <button data-t="erase" aria-pressed="false" title="Eraser – removes only your drawing" aria-label="Eraser"><svg viewBox="0 0 24 24"><path d="M3 16l9-9 6 6-7 7H6z"/><path d="M9 10l6 6"/><path d="M13 20h8"/></svg></button>
+    <button data-t="pan" aria-pressed="false" title="Move – drag to pan the image" aria-label="Move"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></button>
   </div>
-  <div class="g">
-    <input id="color" type="color" value="#e63946" aria-label="Custom color">
+  <div class="g gw">
+    <input id="color" type="color" value="#e63946" aria-label="Custom color" title="Custom color">
     <div id="sw" class="sw" role="group" aria-label="Quick colors"></div>
-    <input id="width" type="range" min="1" max="80" value="6" aria-label="Width">
+    <input id="width" type="range" min="1" max="80" value="6" aria-label="Line width" title="Line width (the eraser has its own width)">
     <span id="wv">6</span>
   </div>
   <div class="g">
-    <button id="zo" aria-label="Zoom out">−</button>
-    <button id="fit">Fit</button>
-    <button id="zi" aria-label="Zoom in">+</button>
+    <button id="zo" aria-label="Zoom out" title="Zoom out">−</button>
+    <button id="fit" aria-label="Fit to screen" title="Fit image to screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <button id="zi" aria-label="Zoom in" title="Zoom in">+</button>
   </div>
-  <button id="save" class="primary" disabled>Save JPEG</button>
+  <div class="menu" id="exportMenu">
+    <button id="exportBtn" class="primary" aria-haspopup="menu" aria-expanded="false" title="Export or import your work">Export&nbsp;▾</button>
+    <div id="menuList" role="menu" hidden>
+      <button role="menuitem" id="miJpeg" disabled title="Download the result as a JPEG image">Save JPEG</button>
+      <button role="menuitem" id="miExport" disabled title="Download the full application status as a JSON file">Export status</button>
+      <button role="menuitem" id="miImport" title="Restore the application status from a JSON file">Import status</button>
+    </div>
+    <input id="importFile" type="file" accept="application/json,.json" hidden>
+  </div>
 </header>
 <div id="stage">
   <canvas id="cv"></canvas>
@@ -185,7 +201,7 @@ cv.addEventListener('wheel',e=>{
 
 /* ---------- UI ---------- */
 function ui(){
-  $('undo').disabled=!ops.length;$('save').disabled=!bg;$('clear').disabled=!bg;
+  $('undo').disabled=!ops.length;$('miJpeg').disabled=!bg;$('miExport').disabled=!bg;$('clear').disabled=!bg;
   $('hint').style.display=bg?'none':'flex';
 }
 document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
@@ -293,15 +309,83 @@ function restore(){
   }catch(e){}
 }
 
-/* ---------- export ---------- */
-$('save').onclick=()=>{
+/* ---------- export / import ---------- */
+function download(blob,name){
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+function saveJpeg(){
   const c=document.createElement('canvas');c.width=bg.width;c.height=bg.height;
   const x=c.getContext('2d');x.drawImage(bg,0,0);x.drawImage(L,0,0);
-  c.toBlob(b=>{
-    const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='markup.jpg';
-    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-  },'image/jpeg',.92);
-};
+  c.toBlob(b=>download(b,'markup.jpg'),'image/jpeg',.92);
+}
+function exportStatus(){
+  const st={
+    format:'markup-status',version:1,exportedAt:new Date().toISOString(),
+    background:bg.toDataURL('image/jpeg',.88),
+    operations:ops,
+    preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase}
+  };
+  download(new Blob([JSON.stringify(st)],{type:'application/json'}),'markup-status.json');
+}
+const num=v=>typeof v==='number'&&isFinite(v);
+const pt=p=>Array.isArray(p)&&p.length===2&&num(p[0])&&num(p[1]);
+function validOp(o){
+  if(!o||typeof o!=='object'||!num(o.w)||typeof o.c!=='string')return false;
+  if(o.t==='pen'||o.t==='erase')return Array.isArray(o.p)&&o.p.length>0&&o.p.every(pt);
+  if(o.t==='line'||o.t==='rect'||o.t==='circle')return pt(o.a)&&pt(o.b);
+  return false;
+}
+function importStatus(file){
+  const fr=new FileReader();
+  fr.onerror=()=>msg('The file could not be read.');
+  fr.onload=()=>{
+    let st;
+    try{st=JSON.parse(fr.result)}catch(e){msg('This is not a valid JSON file.');return}
+    if(!st||st.format!=='markup-status'||typeof st.background!=='string'||!st.background.startsWith('data:image/')||!Array.isArray(st.operations)||!st.operations.every(validOp)){
+      msg('This file is not a valid Markup status export.');return;
+    }
+    if(bg&&!confirm('Importing replaces the current image and drawing. Continue?'))return;
+    const img=new Image();
+    img.onload=()=>{
+      setBackground(img);cur=null;ops=st.operations;replay();
+      const p=st.preferences||{};
+      if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
+      if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=+p.drawWidth;
+      if(p.eraseWidth>=1&&p.eraseWidth<=80)widths.erase=+p.eraseWidth;
+      syncWidth();markSw();savePrefs();persist(true);ui();fit();msg('Status imported.');
+    };
+    img.onerror=()=>msg('The background image in this file could not be loaded.');
+    img.src=st.background;
+  };
+  fr.readAsText(file);
+}
+
+/* ---------- export menu ---------- */
+(()=>{
+  const btn=$('exportBtn'),list=$('menuList');
+  const items=()=>[...list.querySelectorAll('button:not(:disabled)')];
+  function open(){
+    list.hidden=false;list.style.left='';list.style.right='0';
+    if(list.getBoundingClientRect().left<4){list.style.right='auto';list.style.left='0'}
+    btn.setAttribute('aria-expanded','true');
+  }
+  function close(focusBtn){list.hidden=true;btn.setAttribute('aria-expanded','false');if(focusBtn)btn.focus()}
+  btn.onclick=()=>{list.hidden?(open(),items()[0]?.focus()):close()};
+  addEventListener('pointerdown',e=>{if(!list.hidden&&!$('exportMenu').contains(e.target))close()});
+  list.addEventListener('keydown',e=>{
+    const it=items(),i=it.indexOf(document.activeElement);
+    if(e.key==='Escape'){close(true)}
+    else if(e.key==='ArrowDown'){it[(i+1)%it.length]?.focus()}
+    else if(e.key==='ArrowUp'){it[(i-1+it.length)%it.length]?.focus()}
+    else return;
+    e.preventDefault();e.stopPropagation();
+  });
+  $('miJpeg').onclick=()=>{close();saveJpeg()};
+  $('miExport').onclick=()=>{close();exportStatus()};
+  $('miImport').onclick=()=>{close();$('importFile').click()};
+  $('importFile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importStatus(f)};
+})();
 
 if('serviceWorker' in navigator){
   addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
