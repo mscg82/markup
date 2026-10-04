@@ -20,14 +20,19 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 ## Project structure
 
 ```
-index.html              the whole application (HTML, CSS and JavaScript)
-sw.js                   service worker (offline support)
+index.html              page markup
+css/style.css           styles
+js/markup.js            the application logic
+sw.js                   service worker (offline support) – must stay in the root
 manifest.webmanifest    web app manifest (home screen install)
-favicon.ico, favicon.svg
-icon-48.png, icon-96.png, icon-144.png, icon-192.png, icon-512.png
-icon-maskable-512.png   icon with padding for Android adaptive icons
-apple-touch-icon.png    iOS home screen icon
+img/
+  favicon.ico, favicon.svg
+  icon-48.png, icon-96.png, icon-144.png, icon-192.png, icon-512.png
+  icon-maskable-512.png icon with padding for Android adaptive icons
+  apple-touch-icon.png  iOS home screen icon
 ```
+
+`sw.js` is kept in the root on purpose: a service worker can only control pages at or below its own folder, so moving it into `js/` would stop offline support from working (unless your server sends a `Service-Worker-Allowed` header).
 
 There is no build step and no dependencies.
 
@@ -43,11 +48,11 @@ Then open <http://localhost:8000>.
 
 ## Deploying
 
-Upload all the files to any static host (GitHub Pages, Netlify, Nginx, and so on) in the same folder. Notes:
+Upload all the files and folders to any static host (GitHub Pages, Netlify, Nginx, and so on) in the same folder. Notes:
 
 - Serve over **HTTPS** so the service worker and the install option work (`localhost` is also fine for testing).
 - Serve `manifest.webmanifest` as `application/manifest+json` (or `application/json`).
-- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v4`) so installed copies drop the old files.
+- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v7`) so installed copies drop the old files.
 
 ### GitHub Pages
 

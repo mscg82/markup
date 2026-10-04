@@ -1,8 +1,11 @@
 // Bump CACHE when you deploy a new version so clients drop old files.
-const CACHE = 'markup-v5';
+const CACHE = 'markup-v6';
 const ASSETS = [
-  './', './index.html', './manifest.webmanifest', './favicon.svg',
-  './icon-48.png', './icon-96.png', './icon-144.png', './favicon.ico', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'
+  './', './index.html', './manifest.webmanifest',
+  './css/style.css', './js/markup.js',
+  './img/favicon.ico', './img/favicon.svg', './img/apple-touch-icon.png',
+  './img/icon-48.png', './img/icon-96.png', './img/icon-144.png',
+  './img/icon-192.png', './img/icon-512.png', './img/icon-maskable-512.png'
 ];
 
 self.addEventListener('install', e => {
