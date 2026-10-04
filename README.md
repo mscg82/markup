@@ -8,7 +8,7 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 
 - **Background image:** load any image; it is used as an unmodifiable background. Images larger than 2400 px on the long side are downscaled so they fit in browser storage.
 - **Drawing tools:** freehand pen, straight line, rectangle and circle (drag from the center outward).
-- **Color and width:** a color picker plus 16 quick-select swatches, and a width slider. The pen, line and shape tools share one width setting; the eraser has its own.
+- **Color and width:** a built-in custom color picker (it looks the same in every browser) plus 16 quick-select swatches, and a width slider. The pen, line and shape tools share one width setting; the eraser has its own.
 - **Eraser:** removes only your drawing, never the background.
 - **Undo:** every stroke or shape is an operation in a history list; Undo (or Ctrl/Cmd+Z) removes the last one.
 - **Clear:** a click clears the drawing and keeps the background; a long press (about 0.7 s) removes the background too. Both ask for confirmation, and neither can be undone.
@@ -23,6 +23,7 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 index.html              page markup
 css/style.css           styles
 js/markup.js            the application logic
+js/colorpicker.js       custom color picker (same look in every browser)
 sw.js                   service worker (offline support) – must stay in the root
 manifest.webmanifest    web app manifest (home screen install)
 img/
@@ -52,7 +53,7 @@ Upload all the files and folders to any static host (GitHub Pages, Netlify, Ngin
 
 - Serve over **HTTPS** so the service worker and the install option work (`localhost` is also fine for testing).
 - Serve `manifest.webmanifest` as `application/manifest+json` (or `application/json`).
-- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v9`) so installed copies drop the old files.
+- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v10`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
 
 ### GitHub Pages
 

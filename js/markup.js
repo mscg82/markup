@@ -5,6 +5,8 @@ let bg=null,L=null,lc=null,ops=[],tool='pen',s=1,ox=0,oy=0,cur=null,panning=fals
 const widths={draw:6,erase:24};
 const ptrs=new Map();let pinch=null,last=null;
 const MAXDIM=2400;
+const APP_VERSION='v9';   // keep in step with CACHE in sw.js
+$('ver').textContent='Markup '+APP_VERSION;
 
 function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(()=>m.style.display='none',3500)}
 
@@ -128,9 +130,9 @@ function ui(){
   $('undo').disabled=!ops.length;$('miJpeg').disabled=!bg;$('miExport').disabled=!bg;$('clear').disabled=!bg;
   $('hint').style.display=bg?'none':'flex';
 }
-document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
+document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
   tool=b.dataset.t;
-  document.querySelectorAll('#tools button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  document.querySelectorAll('button[data-t]').forEach(x=>x.setAttribute('aria-pressed',x===b));
   syncWidth();setCursor();
 });
 function syncWidth(){
@@ -154,8 +156,9 @@ PALETTE.forEach(c=>{
   const b=document.createElement('button');b.style.background=c;b.dataset.c=c;b.title=c;b.setAttribute('aria-label','Color '+c);
   b.onclick=()=>{$('color').value=c;markSw();savePrefs()};sw.appendChild(b);
 });
-function markSw(){const v=$('color').value.toLowerCase();sw.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===v))}
-$('color').oninput=()=>{markSw();savePrefs()};markSw();
+function markSw(){const v=$('color').value.toLowerCase();picker.set(v);sw.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===v))}
+const picker=createColorPicker({input:$('color'),onChange:(c,final)=>{markSw();if(final)savePrefs()}});
+markSw();
 $('width').oninput=e=>{const v=+e.target.value;widths[tool==='erase'?'erase':'draw']=v;$('wv').textContent=v;savePrefs()};
 function clearWork(all){
   if(!all&&!ops.length){msg('Nothing to clear.');return}

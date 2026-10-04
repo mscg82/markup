@@ -27,15 +27,23 @@
     <button data-t="rect" aria-pressed="false" title="Rectangle – drag from corner to corner" aria-label="Rectangle"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1"/></svg></button>
     <button data-t="circle" aria-pressed="false" title="Circle – drag from the center outward" aria-label="Circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg></button>
     <button data-t="erase" aria-pressed="false" title="Eraser – removes only your drawing" aria-label="Eraser"><svg viewBox="0 0 24 24"><path d="M3 16l9-9 6 6-7 7H6z"/><path d="M9 10l6 6"/><path d="M13 20h8"/></svg></button>
-    <button data-t="pan" aria-pressed="false" title="Move – drag to pan the image" aria-label="Move"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></button>
   </div>
   <div class="g gw">
-    <input id="color" type="color" value="#e63946" aria-label="Custom color" title="Custom color">
+    <div class="cp" id="cp">
+      <button id="colorBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Custom color" title="Custom color"><span id="colorChip"></span></button>
+      <input id="color" type="hidden" value="#e63946">
+      <div id="cpPop" role="dialog" aria-label="Choose a color" hidden>
+        <div id="cpSv" class="cp-sv" tabindex="0" role="slider" aria-label="Saturation and brightness"><div id="cpSvKnob" class="cp-knob"></div></div>
+        <div id="cpHue" class="cp-hue" tabindex="0" role="slider" aria-label="Hue"><div id="cpHueKnob" class="cp-knob"></div></div>
+        <div class="cp-row"><span id="cpPrev" class="cp-prev"></span><input id="cpHex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Hex color"></div>
+      </div>
+    </div>
     <div id="sw" class="sw" role="group" aria-label="Quick colors"></div>
     <input id="width" type="range" min="1" max="80" value="6" aria-label="Line width" title="Line width (the eraser has its own width)">
     <span id="wv">6</span>
   </div>
   <div class="g">
+    <button data-t="pan" aria-pressed="false" title="Move – drag to pan the image" aria-label="Move"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></button>
     <button id="zo" aria-label="Zoom out" title="Zoom out">−</button>
     <button id="fit" aria-label="Fit to screen" title="Fit image to screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
     <button id="zi" aria-label="Zoom in" title="Zoom in">+</button>
@@ -54,7 +62,9 @@
   <canvas id="cv"></canvas>
   <div id="hint">Open an image to start drawing on it.<br>Pinch or scroll to zoom. Drag with Move, two fingers, Space, or the right mouse button.</div>
   <div id="msg"></div>
+  <div id="ver" aria-label="Application version"></div>
 </div>
+<script src="js/colorpicker.js" defer></script>
 <script src="js/markup.js" defer></script>
 </body>
 </html>

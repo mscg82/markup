@@ -30,3 +30,20 @@ button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;s
 canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
 #hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mute);pointer-events:none;text-align:center;padding:20px}
 #msg{position:absolute;left:10px;bottom:10px;background:var(--bar);border:1px solid var(--line);padding:6px 10px;border-radius:6px;display:none}
+
+/* custom color picker */
+.cp{position:relative}
+#colorBtn{width:38px;height:36px;padding:4px}
+#colorChip{display:block;width:100%;height:100%;border-radius:3px;border:1px solid rgba(255,255,255,.35)}
+#cpPop{position:absolute;left:0;top:calc(100% + 6px);z-index:30;width:220px;background:var(--bar);border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+#cpPop[hidden]{display:none}
+.cp-sv{position:relative;height:150px;border-radius:6px;touch-action:none;cursor:crosshair;background-image:linear-gradient(to top,#000,rgba(0,0,0,0)),linear-gradient(to right,#fff,rgba(255,255,255,0))}
+.cp-hue{position:relative;height:16px;border-radius:8px;touch-action:none;cursor:pointer;background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.cp-sv:focus-visible,.cp-hue:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.cp-knob{position:absolute;width:18px;height:18px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 1px 4px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none}
+.cp-hue .cp-knob{top:50%}
+.cp-row{display:flex;gap:8px;align-items:center}
+.cp-prev{width:36px;height:34px;border-radius:6px;border:1px solid var(--line);flex:none}
+#cpHex{flex:1;min-width:0;background:#394147;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-height:36px;font:inherit;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+#ver{position:absolute;right:8px;bottom:6px;font-size:11px;color:var(--mute);opacity:.8;pointer-events:none;user-select:none;-webkit-user-select:none;text-shadow:0 0 3px #000}
