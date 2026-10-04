@@ -185,15 +185,30 @@ function end(e){
 }
 cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
 function cancelCur(){if(cur){cur=null;replay();render()}}
-function startPinch(){
+// Two-finger gesture: starts as pan only; once the fingers spread/close by more than
+// PINCH_THRESHOLD px it locks into zoom only, until a finger is lifted.
+const PINCH_THRESHOLD=28;
+function pinchState(){
   const [a,b]=[...ptrs.values()];
-  pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1])||1,mx:(a[0]+b[0])/2,my:(a[1]+b[1])/2};
+  return{d:Math.hypot(a[0]-b[0],a[1]-b[1])||1,mx:(a[0]+b[0])/2,my:(a[1]+b[1])/2};
+}
+function startPinch(){
+  const c=pinchState();
+  pinch={mode:'pan',d0:c.d,d:c.d,mx:c.mx,my:c.my,ax:0,ay:0};
 }
 function updatePinch(){
-  const [a,b]=[...ptrs.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1])||1,mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;
-  const n=Math.min(40,Math.max(.05,s*d/pinch.d));
-  const ix=(pinch.mx-ox)/s,iy=(pinch.my-oy)/s;
-  s=n;ox=mx-ix*s;oy=my-iy*s;pinch={d,mx,my};render();
+  const c=pinchState();
+  if(pinch.mode==='pan'){
+    if(Math.abs(c.d-pinch.d0)>PINCH_THRESHOLD){
+      // lock into zoom: anchor at the current midpoint, no jump in scale
+      pinch.mode='zoom';pinch.ax=c.mx;pinch.ay=c.my;pinch.d=c.d;
+    }else{
+      ox+=c.mx-pinch.mx;oy+=c.my-pinch.my;pinch.mx=c.mx;pinch.my=c.my;render();return;
+    }
+  }
+  const n=Math.min(40,Math.max(.05,s*c.d/pinch.d));
+  ox=pinch.ax-(pinch.ax-ox)/s*n;oy=pinch.ay-(pinch.ay-oy)/s*n;
+  s=n;pinch.d=c.d;render();
 }
 cv.addEventListener('wheel',e=>{
   e.preventDefault();const q=local(e);zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)),q[0],q[1]);
