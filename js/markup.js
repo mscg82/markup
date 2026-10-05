@@ -5,7 +5,7 @@ let bg=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,cur=null
 const widths={draw:6,erase:24};
 const ptrs=new Map();let pinch=null,last=null;
 const MAXDIM=2400;
-const APP_VERSION='v10';   // keep in step with CACHE in sw.js
+const APP_VERSION='v11';   // keep in step with CACHE in sw.js
 $('ver').textContent='Markup '+APP_VERSION;
 
 function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(()=>m.style.display='none',3500)}
@@ -163,7 +163,7 @@ $('width').oninput=e=>{const v=+e.target.value;widths[tool==='erase'?'erase':'dr
 function clearWork(all){
   if(!all&&!ops.length){msg('Nothing to clear.');return}
   if(!confirm(all?'Remove the drawing AND the background image? This cannot be undone.':'Clear everything you have drawn? The background image stays. This cannot be undone.'))return;
-  cur=null;ops=[];redoStack=[];
+  cur=null;ops=[];redoStack=[];resetNames();
   if(all){
     bg=L=lc=null;
     try{localStorage.removeItem('markup.bg');localStorage.removeItem('markup.ops')}catch(e){}
@@ -217,7 +217,7 @@ $('file').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
   if(ops.length&&!confirm('Opening a new image discards the current drawing. Continue?'))return;
   const url=URL.createObjectURL(f),img=new Image();
-  img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];persist(true);ui();fit()};
+  img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];resetNames();persist(true);ui();fit()};
   img.onerror=()=>msg('That file could not be read as an image.');
   img.src=url;
 };
@@ -247,19 +247,19 @@ function download(blob,name){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
-function saveJpeg(){
+function saveJpeg(name){
   const c=document.createElement('canvas');c.width=bg.width;c.height=bg.height;
   const x=c.getContext('2d');x.drawImage(bg,0,0);x.drawImage(L,0,0);
-  c.toBlob(b=>download(b,'markup.jpg'),'image/jpeg',.92);
+  c.toBlob(b=>download(b,name),'image/jpeg',.92);
 }
-function exportStatus(){
+function exportStatus(name){
   const st={
     format:'markup-status',version:1,exportedAt:new Date().toISOString(),
     background:bg.toDataURL('image/jpeg',.88),
     operations:ops,
     preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase}
   };
-  download(new Blob([JSON.stringify(st)],{type:'application/json'}),'markup-status.json');
+  download(new Blob([JSON.stringify(st)],{type:'application/json'}),name);
 }
 const num=v=>typeof v==='number'&&isFinite(v);
 const pt=p=>Array.isArray(p)&&p.length===2&&num(p[0])&&num(p[1]);
@@ -281,7 +281,7 @@ function importStatus(file){
     if(bg&&!confirm('Importing replaces the current image and drawing. Continue?'))return;
     const img=new Image();
     img.onload=()=>{
-      setBackground(img);cur=null;ops=st.operations;redoStack=[];replay();
+      setBackground(img);cur=null;ops=st.operations;redoStack=[];resetNames();replay();
       const p=st.preferences||{};
       if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
       if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=+p.drawWidth;
@@ -323,8 +323,8 @@ function importStatus(file){
   miNew.onclick=()=>toggleSub(sub.hidden);
   $('miOpen').onclick=()=>{close();$('file').click()};
   $('miEmpty').onclick=()=>{close();openNewDialog()};
-  $('miJpeg').onclick=()=>{close();saveJpeg()};
-  $('miExport').onclick=()=>{close();exportStatus()};
+  $('miJpeg').onclick=()=>{close();askFileName('jpeg')};
+  $('miExport').onclick=()=>{close();askFileName('status')};
   $('miImport').onclick=()=>{close();$('importFile').click()};
   $('importFile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importStatus(f)};
 })();
@@ -344,11 +344,41 @@ function createEmptyImage(){
   if(ops.length&&!confirm('Creating a new image discards the current drawing. Continue?'))return;
   const c=document.createElement('canvas');c.width=w;c.height=h;
   const x=c.getContext('2d');x.fillStyle=$('newColor').value;x.fillRect(0,0,w,h);
-  setBackground(c);cur=null;ops=[];redoStack=[];persist(true);ui();fit();newDlg.close();
+  setBackground(c);cur=null;ops=[];redoStack=[];resetNames();persist(true);ui();fit();newDlg.close();
 }
 $('newOk').onclick=createEmptyImage;
 $('newCancel').onclick=()=>newDlg.close();
 newDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type==='number'){e.preventDefault();createEmptyImage()}});
+
+/* ---------- file names (Save JPEG / Export status) ---------- */
+// The last name used is remembered separately for each action; it is forgotten
+// whenever the canvas is cleared or replaced (clear, open image, empty image, import).
+const NAMES_KEY='markup.names';
+let names={};
+try{names=JSON.parse(localStorage.getItem(NAMES_KEY)||'{}')||{}}catch(e){names={}}
+function resetNames(){names={};try{localStorage.removeItem(NAMES_KEY)}catch(e){}}
+const FILE_KINDS={
+  jpeg:{title:'Save JPEG',button:'Save',ext:'.jpg',def:'markup',strip:/\.jpe?g$/i,run:n=>saveJpeg(n)},
+  status:{title:'Export status',button:'Export',ext:'.json',def:'markup-status',strip:/\.json$/i,run:n=>exportStatus(n)}
+};
+const nameDlg=$('nameDlg');let nameKind=null;
+function askFileName(kind){
+  nameKind=kind;const k=FILE_KINDS[kind];
+  $('nameTitle').textContent=k.title;$('nameExt').textContent=k.ext;$('nameOk').textContent=k.button;
+  $('nameErr').hidden=true;$('nameInput').value=names[kind]||k.def;
+  nameDlg.showModal();$('nameInput').select();
+}
+function confirmFileName(){
+  const k=FILE_KINDS[nameKind];
+  const n=$('nameInput').value.replace(/[\\/:*?"<>|\u0000-\u001f]/g,'').trim().replace(k.strip,'').replace(/[. ]+$/,'');
+  if(!n){const e=$('nameErr');e.textContent='Please enter a file name.';e.hidden=false;return}
+  names[nameKind]=n;
+  try{localStorage.setItem(NAMES_KEY,JSON.stringify(names))}catch(e){}
+  nameDlg.close();k.run(n+k.ext);
+}
+$('nameOk').onclick=confirmFileName;
+$('nameCancel').onclick=()=>nameDlg.close();
+$('nameInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmFileName()}});
 
 if('serviceWorker' in navigator){
   addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));

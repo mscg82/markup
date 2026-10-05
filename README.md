@@ -13,7 +13,7 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 - **Undo and redo:** every stroke or shape is an operation in a history list. Undo (or Ctrl/Cmd+Z) removes the last one and Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y) puts it back. The redo list is emptied as soon as you draw something new, and it is not saved between sessions.
 - **Clear:** a click clears the drawing and keeps the background; a long press (about 0.7 s) removes the background too. Both ask for confirmation, and neither can be undone.
 - **Zoom and pan:** mouse wheel, pinch, or the −, Fit and + buttons to zoom. To pan, use the Move tool, two fingers, Space + drag, the right or middle mouse button, or the arrow keys.
-- **Main menu (☰):** *New* offers *Open image* and *Empty image* (you choose the width and height, up to 2400 px, and the background color; white by default). *Save JPEG* downloads the background and drawing merged at the background's full resolution. *Export status* downloads a JSON file with the background, the full list of operations and the saved settings (color and widths). *Import status* restores such a file, for example on another device.
+- **Main menu (☰):** *New* offers *Open image* and *Empty image* (you choose the width and height, up to 2400 px, and the background color; white by default). *Save JPEG* asks for a file name and downloads the background and drawing merged at the background's full resolution. *Export status* asks for a file name and downloads a JSON file with the background, the full list of operations and the saved settings (color and widths). *Import status* restores such a file, for example on another device.
 - **Persistence:** the background, the full operation list, the selected color and the tool widths are saved automatically and restored on reopening.
 - **Installable and offline:** a web app manifest and a service worker let you add the app to the home screen and use it without a connection.
 
@@ -53,7 +53,7 @@ Upload all the files and folders to any static host (GitHub Pages, Netlify, Ngin
 
 - Serve over **HTTPS** so the service worker and the install option work (`localhost` is also fine for testing).
 - Serve `manifest.webmanifest` as `application/manifest+json` (or `application/json`).
-- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v11`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
+- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v12`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
 
 ### GitHub Pages
 
@@ -66,7 +66,7 @@ Upload all the files and folders to any static host (GitHub Pages, Netlify, Ngin
 - The background is kept in its own canvas and is never modified. Drawing happens on a separate transparent layer.
 - The history is stored as vector operations (type, color, width, points) rather than pixels, so it stays small and Undo simply replays the remaining operations onto the layer. The eraser is an operation too, using the `destination-out` blend mode on the drawing layer.
 - Zoom and pan are a scale and offset applied when the canvas is rendered. Pointer events handle mouse, touch and pen uniformly.
-- Local storage keys: `markup.bg` (background as a JPEG data URL), `markup.ops` (operation list) and `markup.prefs` (color and widths).
+- Local storage keys: `markup.bg` (background as a JPEG data URL), `markup.ops` (operation list) and `markup.prefs` (color and widths) and `markup.names` (last file names used for Save JPEG and Export status; forgotten when the canvas is cleared or replaced).
 
 ## Limitations
 

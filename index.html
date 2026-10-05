@@ -77,6 +77,13 @@
   <p id="newErr" class="dlg-err" hidden></p>
   <div class="dlg-actions"><button id="newCancel" type="button">Cancel</button><button id="newOk" type="button" class="primary">Create</button></div>
 </dialog>
+<dialog id="nameDlg" aria-labelledby="nameTitle">
+  <h2 id="nameTitle">Save</h2>
+  <label class="dlg-label" for="nameInput">File name</label>
+  <div class="name-row"><input id="nameInput" type="text" maxlength="100" spellcheck="false" autocomplete="off"><span id="nameExt" class="dlg-ext"></span></div>
+  <p id="nameErr" class="dlg-err" hidden></p>
+  <div class="dlg-actions"><button id="nameCancel" type="button">Cancel</button><button id="nameOk" type="button" class="primary">Save</button></div>
+</dialog>
 <script src="js/colorpicker.js" defer></script>
 <script src="js/markup.js" defer></script>
 </body>
