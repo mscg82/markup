@@ -3,15 +3,16 @@ const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
 let bg=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
-const ptrs=new Map();let pinch=null,last=null;
+const ptrs=new Map();let pinch=null,last=null,fillTap=null;
 const MAXDIM=2400;
-const APP_VERSION='v12';   // keep in step with CACHE in sw.js
+const APP_VERSION='v13';   // keep in step with CACHE in sw.js
 $('ver').textContent='Markup '+APP_VERSION;
 
 function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(()=>m.style.display='none',3500)}
 
 /* ---------- drawing primitives ---------- */
 function drawOp(c,o){
+  if(o.t==='fill'){applyFill(o);return}
   c.save();c.lineCap=c.lineJoin='round';c.lineWidth=o.w;c.strokeStyle=o.c||'#000';
   if(o.t==='erase')c.globalCompositeOperation='destination-out';
   c.beginPath();
@@ -23,6 +24,52 @@ function drawOp(c,o){
   else if(o.t==='rect'){c.rect(o.a[0],o.a[1],o.b[0]-o.a[0],o.b[1]-o.a[1])}
   else if(o.t==='circle'){c.arc(o.a[0],o.a[1],Math.hypot(o.b[0]-o.a[0],o.b[1]-o.a[1]),0,Math.PI*2)}
   c.stroke();c.restore();
+}
+// Flood fill. A fill op stores only {color, seed point, tolerance}; its pixels are recomputed
+// from the drawing layer (all earlier operations) whenever the history is replayed.
+// The background image is ignored: only what the user drew acts as a boundary.
+const FILL_TOL=32;   // max difference per channel for drawn pixels to count as "the same color"
+function applyFill(o){
+  const w=bg.width,h=bg.height,sx=Math.floor(o.x),sy=Math.floor(o.y);
+  const m=/^#([0-9a-f]{6})$/i.exec(o.c);
+  if(!m||sx<0||sy<0||sx>=w||sy>=h)return;
+  const fr=parseInt(m[1].slice(0,2),16),fg=parseInt(m[1].slice(2,4),16),fb=parseInt(m[1].slice(4,6),16);
+  const img=lc.getImageData(0,0,w,h),d=img.data,tol=o.tol;
+  const i0=(sy*w+sx)*4,tr=d[i0],tg=d[i0+1],tb=d[i0+2],ta=d[i0+3];
+  const EMPTY=40;   // alpha at or below this counts as "nothing drawn here"
+  const ok=ta<=EMPTY
+    ? p=>d[p*4+3]<=EMPTY                                  // started on empty space: spread over empty space
+    : p=>{const i=p*4;return d[i+3]>EMPTY&&Math.abs(d[i]-tr)<=tol&&Math.abs(d[i+1]-tg)<=tol&&Math.abs(d[i+2]-tb)<=tol&&Math.abs(d[i+3]-ta)<=tol};
+  const mask=new Uint8Array(w*h),stack=[sx,sy];
+  while(stack.length){                      // scanline flood fill
+    const y=stack.pop();let x=stack.pop(),p=y*w+x;
+    if(mask[p]||!ok(p))continue;
+    while(x>0&&!mask[p-1]&&ok(p-1)){x--;p--}
+    let up=false,down=false;
+    while(x<w&&!mask[p]&&ok(p)){
+      mask[p]=1;
+      if(y>0){const q=p-w,mm=!mask[q]&&ok(q);if(mm&&!up){stack.push(x,y-1);up=true}else if(!mm)up=false}
+      if(y<h-1){const q=p+w,mm=!mask[q]&&ok(q);if(mm&&!down){stack.push(x,y+1);down=true}else if(!mm)down=false}
+      x++;p++;
+    }
+  }
+  for(let y=0,p=0;y<h;y++)for(let x=0;x<w;x++,p++){
+    const i=p*4;
+    if(mask[p]){d[i]=fr;d[i+1]=fg;d[i+2]=fb;d[i+3]=255;continue}
+    // one-pixel ring around the region: paint *under* existing strokes so their anti-aliased edges blend with the fill
+    if((x>0&&mask[p-1])||(x<w-1&&mask[p+1])||(y>0&&mask[p-w])||(y<h-1&&mask[p+w])){
+      const a=d[i+3];
+      if(a<255){const t=a/255;d[i]=Math.round(d[i]*t+fr*(1-t));d[i+1]=Math.round(d[i+1]*t+fg*(1-t));d[i+2]=Math.round(d[i+2]*t+fb*(1-t));d[i+3]=255}
+    }
+  }
+  lc.putImageData(img,0,0);
+}
+function commitFill(f){
+  if(!bg)return;
+  const x=Math.floor(f.p[0]),y=Math.floor(f.p[1]);
+  if(x<0||y<0||x>=bg.width||y>=bg.height)return;
+  const o={t:'fill',c:f.c,x,y,tol:FILL_TOL};
+  applyFill(o);ops.push(o);redoStack=[];persist();ui();render();
 }
 function replay(){lc.clearRect(0,0,L.width,L.height);ops.forEach(o=>drawOp(lc,o))}
 
@@ -58,9 +105,10 @@ const local=e=>{const r=cv.getBoundingClientRect();return[e.clientX-r.left,e.cli
 cv.addEventListener('pointerdown',e=>{
   if(!bg)return;cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId,local(e));
-  if(ptrs.size===2){cancelCur();startPinch();return}
+  if(ptrs.size===2){fillTap=null;cancelCur();startPinch();return}
   if(ptrs.size>2)return;
   if(tool==='pan'||spaceDown||e.button===1||e.button===2){panning=true;last=local(e);setCursor();return}
+  if(tool==='fill'){fillTap={id:e.pointerId,p:toImg(e),sx:e.clientX,sy:e.clientY,c:$('color').value};return}   // applied on release
   const p=toImg(e),w=tool==='erase'?widths.erase:widths.draw,c=$('color').value;
   if(tool==='pen'||tool==='erase'){cur={t:tool,c,w,p:[p]};drawOp(lc,cur);}
   else cur={t:tool,c,w,a:p,b:p};
@@ -71,6 +119,7 @@ cv.addEventListener('pointermove',e=>{
   ptrs.set(e.pointerId,local(e));
   if(ptrs.size===2&&pinch){updatePinch();return}
   if(panning){const q=local(e);ox+=q[0]-last[0];oy+=q[1]-last[1];last=q;render();return}
+  if(fillTap&&fillTap.id===e.pointerId&&Math.hypot(e.clientX-fillTap.sx,e.clientY-fillTap.sy)>10)fillTap=null;   // it was a drag, not a tap
   if(!cur)return;
   const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];
   for(const ev of (evs.length?evs:[e])){
@@ -85,6 +134,7 @@ cv.addEventListener('pointermove',e=>{
 function end(e){
   if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
   if(ptrs.size<2)pinch=null;
+  if(fillTap&&fillTap.id===e.pointerId){const f=fillTap;fillTap=null;if(e.type==='pointerup')commitFill(f)}
   if(cur&&e.type==='pointerup'){
     const o=cur;cur=null;
     const degenerate=!o.p&&o.a[0]===o.b[0]&&o.a[1]===o.b[1];
@@ -270,6 +320,7 @@ function exportStatus(name){
 const num=v=>typeof v==='number'&&isFinite(v);
 const pt=p=>Array.isArray(p)&&p.length===2&&num(p[0])&&num(p[1]);
 function validOp(o){
+  if(o&&o.t==='fill')return typeof o.c==='string'&&num(o.x)&&num(o.y)&&num(o.tol);
   if(!o||typeof o!=='object'||!num(o.w)||typeof o.c!=='string')return false;
   if(o.t==='pen'||o.t==='erase')return Array.isArray(o.p)&&o.p.length>0&&o.p.every(pt);
   if(o.t==='line'||o.t==='rect'||o.t==='circle')return pt(o.a)&&pt(o.b);

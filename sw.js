@@ -1,5 +1,5 @@
 // Bump CACHE when you deploy a new version so clients drop old files.
-const CACHE = 'markup-v12';
+const CACHE = 'markup-v13';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './css/style.css', './js/markup.js', './js/colorpicker.js',

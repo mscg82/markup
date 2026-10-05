@@ -7,7 +7,8 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 ## Features
 
 - **Background image:** load any image; it is used as an unmodifiable background. Images larger than 2400 px on the long side are downscaled so they fit in browser storage.
-- **Drawing tools:** freehand pen, plus a **Shapes** menu with straight line, rectangle and circle (the circle is dragged from the center outward). The Shapes button shows the icon of the shape you picked last.
+- **Drawing tools:** freehand pen, a **Fill** (flood fill) tool, plus a **Shapes** menu with straight line, rectangle and circle (the circle is dragged from the center outward). The Shapes button shows the icon of the shape you picked last.
+- **Fill:** tap an area to flood-fill it with the selected color. The background image is ignored: only what you drew (lines, shapes, earlier fills) acts as a boundary, so a closed shape can be filled, and tapping on a blank area with nothing around it fills the whole image. Tapping on something you already drew or filled recolors the connected area of that same color. The fill is an ordinary history entry, so Undo and Redo work on it.
 - **Color and width:** a built-in custom color picker (it looks the same in every browser) plus 16 quick-select swatches, and a width slider. The pen, line and shape tools share one width setting; the eraser has its own.
 - **Eraser:** removes only your drawing, never the background.
 - **Undo and redo:** every stroke or shape is an operation in a history list. Undo (or Ctrl/Cmd+Z) removes the last one and Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y) puts it back. The redo list is emptied as soon as you draw something new, and it is not saved between sessions.
@@ -53,7 +54,7 @@ Upload all the files and folders to any static host (GitHub Pages, Netlify, Ngin
 
 - Serve over **HTTPS** so the service worker and the install option work (`localhost` is also fine for testing).
 - Serve `manifest.webmanifest` as `application/manifest+json` (or `application/json`).
-- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v13`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
+- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v14`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
 
 ### GitHub Pages
 
@@ -70,6 +71,7 @@ Upload all the files and folders to any static host (GitHub Pages, Netlify, Ngin
 
 ## Limitations
 
+- A fill is stored as a seed point plus a tolerance and recomputed when the history is replayed (Undo, reload, import). Fills on large images can take a fraction of a second, and Undo is slower the more fills there are. A drawn boundary must be closed: a gap, even a single pixel wide, lets the fill leak out.
 - Local storage is limited to a few MB per site, so very large images may not be saved. The app shows a message if saving fails.
 - Work is stored per browser and per device; it is not synced anywhere.
 - Exported images are JPEG only, so there is no transparency.
