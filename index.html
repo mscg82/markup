@@ -34,7 +34,8 @@
       <input id="file" type="file" accept="image/*" hidden>
       <input id="importFile" type="file" accept="application/json,.json" hidden>
     </div>
-    <button id="undo" disabled title="Undo last operation (Ctrl+Z)">Undo</button>
+    <button id="undo" disabled title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+    <button id="redo" disabled title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
     <button id="clear" disabled title="Click: clear drawing. Hold: also remove the image.">Clear</button>
   </div>
   <div class="g" id="tools" role="group" aria-label="Tools">

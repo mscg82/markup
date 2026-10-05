@@ -23,4 +23,4 @@ index.html (markup), css/style.css, js/markup.js (app logic), js/colorpicker.js 
 - Say plainly when something has not been tested on a real device.
 
 ## Ideas not yet done
-Redo, fill option for shapes, remembering the selected tool, text tool, offline update notification.
+fill option for shapes, remembering the selected tool, text tool, offline update notification.

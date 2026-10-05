@@ -1,7 +1,7 @@
 (()=>{
 const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
-let bg=null,L=null,lc=null,ops=[],tool='pen',s=1,ox=0,oy=0,cur=null,panning=false;
+let bg=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
 const ptrs=new Map();let pinch=null,last=null;
 const MAXDIM=2400;
@@ -88,7 +88,7 @@ function end(e){
   if(cur&&e.type==='pointerup'){
     const o=cur;cur=null;
     const degenerate=!o.p&&o.a[0]===o.b[0]&&o.a[1]===o.b[1];
-    if(!degenerate){ops.push(o);if(o.t==='pen'||o.t==='erase'){}else drawOp(lc,o);persist()}
+    if(!degenerate){ops.push(o);redoStack=[];if(o.t==='pen'||o.t==='erase'){}else drawOp(lc,o);persist()}
     else replay();
     ui();render();
   }else if(cur)cancelCur();
@@ -127,7 +127,7 @@ cv.addEventListener('wheel',e=>{
 
 /* ---------- UI ---------- */
 function ui(){
-  $('undo').disabled=!ops.length;$('miJpeg').disabled=!bg;$('miExport').disabled=!bg;$('clear').disabled=!bg;
+  $('undo').disabled=!ops.length;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miExport').disabled=!bg;$('clear').disabled=!bg;
   $('hint').style.display=bg?'none':'flex';
 }
 document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
@@ -163,7 +163,7 @@ $('width').oninput=e=>{const v=+e.target.value;widths[tool==='erase'?'erase':'dr
 function clearWork(all){
   if(!all&&!ops.length){msg('Nothing to clear.');return}
   if(!confirm(all?'Remove the drawing AND the background image? This cannot be undone.':'Clear everything you have drawn? The background image stays. This cannot be undone.'))return;
-  cur=null;ops=[];
+  cur=null;ops=[];redoStack=[];
   if(all){
     bg=L=lc=null;
     try{localStorage.removeItem('markup.bg');localStorage.removeItem('markup.ops')}catch(e){}
@@ -185,7 +185,8 @@ function clearWork(all){
   b.addEventListener('contextmenu',e=>e.preventDefault());
   b.addEventListener('click',e=>{if(e.detail===0&&!b.disabled)clearWork(false)}); // keyboard
 })();
-$('undo').onclick=()=>{if(!ops.length)return;ops.pop();replay();persist();ui();render()};
+$('undo').onclick=()=>{if(!ops.length)return;redoStack.push(ops.pop());replay();persist();ui();render()};
+$('redo').onclick=()=>{if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);drawOp(lc,o);persist();ui();render()};
 $('zi').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(1.25,r.width/2,r.height/2)};
 $('zo').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(.8,r.width/2,r.height/2)};
 $('fit').onclick=fit;
@@ -193,7 +194,11 @@ let spaceDown=false;
 function setCursor(){cv.style.cursor=panning?'grabbing':(tool==='pan'||spaceDown)?'grab':'crosshair'}
 addEventListener('keydown',e=>{
   if(e.target.closest&&e.target.closest('dialog'))return;   // let dialogs handle their own keys
-  if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();$('undo').click();return}
+  if(e.ctrlKey||e.metaKey){
+    const k=e.key.toLowerCase();
+    if(k==='z'&&!e.shiftKey){e.preventDefault();$('undo').click();return}
+    if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();$('redo').click();return}
+  }
   if(e.code==='Space'&&e.target.tagName!=='BUTTON'&&e.target.tagName!=='INPUT'){e.preventDefault();spaceDown=true;setCursor()}
   const k={ArrowLeft:[60,0],ArrowRight:[-60,0],ArrowUp:[0,60],ArrowDown:[0,-60]}[e.key];
   if(k&&e.target.tagName!=='INPUT'){ox+=k[0];oy+=k[1];render()}
@@ -212,7 +217,7 @@ $('file').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
   if(ops.length&&!confirm('Opening a new image discards the current drawing. Continue?'))return;
   const url=URL.createObjectURL(f),img=new Image();
-  img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];persist(true);ui();fit()};
+  img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];persist(true);ui();fit()};
   img.onerror=()=>msg('That file could not be read as an image.');
   img.src=url;
 };
@@ -276,7 +281,7 @@ function importStatus(file){
     if(bg&&!confirm('Importing replaces the current image and drawing. Continue?'))return;
     const img=new Image();
     img.onload=()=>{
-      setBackground(img);cur=null;ops=st.operations;replay();
+      setBackground(img);cur=null;ops=st.operations;redoStack=[];replay();
       const p=st.preferences||{};
       if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
       if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=+p.drawWidth;
@@ -339,7 +344,7 @@ function createEmptyImage(){
   if(ops.length&&!confirm('Creating a new image discards the current drawing. Continue?'))return;
   const c=document.createElement('canvas');c.width=w;c.height=h;
   const x=c.getContext('2d');x.fillStyle=$('newColor').value;x.fillRect(0,0,w,h);
-  setBackground(c);cur=null;ops=[];persist(true);ui();fit();newDlg.close();
+  setBackground(c);cur=null;ops=[];redoStack=[];persist(true);ui();fit();newDlg.close();
 }
 $('newOk').onclick=createEmptyImage;
 $('newCancel').onclick=()=>newDlg.close();

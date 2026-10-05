@@ -10,7 +10,7 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 - **Drawing tools:** freehand pen, straight line, rectangle and circle (drag from the center outward).
 - **Color and width:** a built-in custom color picker (it looks the same in every browser) plus 16 quick-select swatches, and a width slider. The pen, line and shape tools share one width setting; the eraser has its own.
 - **Eraser:** removes only your drawing, never the background.
-- **Undo:** every stroke or shape is an operation in a history list; Undo (or Ctrl/Cmd+Z) removes the last one.
+- **Undo and redo:** every stroke or shape is an operation in a history list. Undo (or Ctrl/Cmd+Z) removes the last one and Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y) puts it back. The redo list is emptied as soon as you draw something new, and it is not saved between sessions.
 - **Clear:** a click clears the drawing and keeps the background; a long press (about 0.7 s) removes the background too. Both ask for confirmation, and neither can be undone.
 - **Zoom and pan:** mouse wheel, pinch, or the −, Fit and + buttons to zoom. To pan, use the Move tool, two fingers, Space + drag, the right or middle mouse button, or the arrow keys.
 - **Main menu (☰):** *New* offers *Open image* and *Empty image* (you choose the width and height, up to 2400 px, and the background color; white by default). *Save JPEG* downloads the background and drawing merged at the background's full resolution. *Export status* downloads a JSON file with the background, the full list of operations and the saved settings (color and widths). *Import status* restores such a file, for example on another device.
@@ -72,7 +72,6 @@ Upload all the files and folders to any static host (GitHub Pages, Netlify, Ngin
 
 - Local storage is limited to a few MB per site, so very large images may not be saved. The app shows a message if saving fails.
 - Work is stored per browser and per device; it is not synced anywhere.
-- There is no redo.
 - Exported images are JPEG only, so there is no transparency.
 
 ## Browser support
