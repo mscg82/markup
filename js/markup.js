@@ -5,7 +5,7 @@ let bg=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,cur=null
 const widths={draw:6,erase:24};
 const ptrs=new Map();let pinch=null,last=null;
 const MAXDIM=2400;
-const APP_VERSION='v11';   // keep in step with CACHE in sw.js
+const APP_VERSION='v12';   // keep in step with CACHE in sw.js
 $('ver').textContent='Markup '+APP_VERSION;
 
 function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(()=>m.style.display='none',3500)}
@@ -133,6 +133,12 @@ function ui(){
 document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
   tool=b.dataset.t;
   document.querySelectorAll('button[data-t]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  const isShape=!!b.closest('#shapesList');
+  $('shapesBtn').setAttribute('aria-pressed',String(isShape));
+  if(isShape){   // the Shapes button shows the icon of the chosen shape; close its menu
+    $('shapesIcon').innerHTML=b.querySelector('svg').outerHTML;
+    $('shapesList').hidden=true;$('shapesBtn').setAttribute('aria-expanded','false');
+  }
   syncWidth();setCursor();
 });
 function syncWidth(){
@@ -327,6 +333,32 @@ function importStatus(file){
   $('miExport').onclick=()=>{close();askFileName('status')};
   $('miImport').onclick=()=>{close();$('importFile').click()};
   $('importFile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importStatus(f)};
+})();
+
+/* ---------- shapes menu ---------- */
+(()=>{
+  const btn=$('shapesBtn'),list=$('shapesList');
+  const items=()=>[...list.querySelectorAll('button')];
+  function open(){
+    list.hidden=false;list.style.left='0';
+    const over=list.getBoundingClientRect().right-(innerWidth-6);
+    if(over>0)list.style.left=(-over)+'px';
+    btn.setAttribute('aria-expanded','true');
+  }
+  function close(focusBtn){list.hidden=true;btn.setAttribute('aria-expanded','false');if(focusBtn)btn.focus()}
+  btn.onclick=()=>{
+    if(!list.hidden){close();return}
+    open();(items().find(b=>b.getAttribute('aria-pressed')==='true')||items()[0]).focus();
+  };
+  addEventListener('pointerdown',e=>{if(!list.hidden&&!$('shapesMenu').contains(e.target))close()});
+  list.addEventListener('keydown',e=>{
+    const it=items(),i=it.indexOf(document.activeElement);
+    if(e.key==='Escape'){close(true)}
+    else if(e.key==='ArrowDown'){it[(i+1)%it.length].focus()}
+    else if(e.key==='ArrowUp'){it[(i-1+it.length)%it.length].focus()}
+    else return;
+    e.preventDefault();e.stopPropagation();
+  });
 })();
 
 /* ---------- new empty image ---------- */
