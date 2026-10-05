@@ -1,14 +1,26 @@
 /* Custom color picker (saturation/value square + hue bar + hex field).
    Draws its own UI so it looks the same in every browser.
-   createColorPicker({input, onChange}) -> {set(hex)}
-   - input:    the element whose .value holds the current "#rrggbb" color
+
+   createColorPicker({mount, input, onChange, inline}) -> {set(hex)}
+   - mount:    element the picker builds its UI into
+   - input:    element whose .value holds the current "#rrggbb" color
    - onChange: called as onChange(hex, final) when the USER changes the color
                (final=false while dragging, true when the gesture ends)
+   - inline:   false (default) = a color button that opens a popover;
+               true = the picker panel is always visible
    - set(hex): updates the picker UI from outside, without calling onChange */
-function createColorPicker({input,onChange}){
-  const $=id=>document.getElementById(id);
-  const btn=$('colorBtn'),chip=$('colorChip'),wrap=$('cp'),pop=$('cpPop');
-  const svEl=$('cpSv'),svK=$('cpSvKnob'),hueEl=$('cpHue'),hueK=$('cpHueKnob'),hexIn=$('cpHex'),prev=$('cpPrev');
+function createColorPicker({mount,input,onChange,inline=false}){
+  mount.classList.add('cp');mount.classList.toggle('inline',inline);
+  mount.innerHTML=(inline?'':'<button type="button" class="cp-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Custom color" title="Custom color"><span class="cp-chip"></span></button>')+
+    `<div class="cp-pop" role="group" aria-label="Choose a color"${inline?'':' hidden'}>
+      <div class="cp-sv" tabindex="0" role="slider" aria-label="Saturation and brightness"><div class="cp-knob"></div></div>
+      <div class="cp-hue" tabindex="0" role="slider" aria-label="Hue"><div class="cp-knob"></div></div>
+      <div class="cp-row"><span class="cp-prev"></span><input class="cp-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Hex color"></div>
+    </div>`;
+  const q=sel=>mount.querySelector(sel);
+  const btn=q('.cp-btn'),chip=q('.cp-chip'),pop=q('.cp-pop');
+  const svEl=q('.cp-sv'),svK=svEl.firstElementChild,hueEl=q('.cp-hue'),hueK=hueEl.firstElementChild;
+  const hexIn=q('.cp-hex'),prev=q('.cp-prev');
   const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
   let h=0,s=1,v=1;
 
@@ -39,7 +51,8 @@ function createColorPicker({input,onChange}){
     svEl.style.backgroundColor=`hsl(${h},100%,50%)`;
     svK.style.left=s*100+'%';svK.style.top=(1-v)*100+'%';svK.style.background=c;
     hueK.style.left=h/360*100+'%';hueK.style.background=`hsl(${h},100%,50%)`;
-    chip.style.background=c;prev.style.background=c;
+    if(chip)chip.style.background=c;
+    prev.style.background=c;
     if(document.activeElement!==hexIn)hexIn.value=c;
   }
   function emit(final,c){
@@ -83,7 +96,12 @@ function createColorPicker({input,onChange}){
   });
   hexIn.addEventListener('blur',()=>{hexIn.value=input.value});
 
-  // popover
+  // popover (button mode only)
+  pop.addEventListener('keydown',e=>{
+    if(inline)return;
+    e.stopPropagation();                 // keep arrows/space from panning the canvas
+    if(e.key==='Escape'||e.key==='Enter'&&e.target!==hexIn)close(true);
+  });
   function open(){
     pop.hidden=false;pop.style.left='0';
     const over=pop.getBoundingClientRect().right-(innerWidth-6);
@@ -91,12 +109,10 @@ function createColorPicker({input,onChange}){
     btn.setAttribute('aria-expanded','true');
   }
   function close(focus){pop.hidden=true;btn.setAttribute('aria-expanded','false');if(focus)btn.focus()}
-  btn.addEventListener('click',()=>pop.hidden?open():close());
-  addEventListener('pointerdown',e=>{if(!pop.hidden&&!wrap.contains(e.target))close()});
-  pop.addEventListener('keydown',e=>{
-    e.stopPropagation();                 // keep arrows/space from panning the canvas
-    if(e.key==='Escape'||e.key==='Enter'&&e.target!==hexIn)close(true);
-  });
+  if(!inline){
+    btn.addEventListener('click',()=>pop.hidden?open():close());
+    addEventListener('pointerdown',e=>{if(!pop.hidden&&!mount.contains(e.target))close()});
+  }
 
   function set(c){
     c=(c||'').toLowerCase();

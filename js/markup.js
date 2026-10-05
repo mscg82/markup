@@ -5,7 +5,7 @@ let bg=null,L=null,lc=null,ops=[],tool='pen',s=1,ox=0,oy=0,cur=null,panning=fals
 const widths={draw:6,erase:24};
 const ptrs=new Map();let pinch=null,last=null;
 const MAXDIM=2400;
-const APP_VERSION='v9';   // keep in step with CACHE in sw.js
+const APP_VERSION='v10';   // keep in step with CACHE in sw.js
 $('ver').textContent='Markup '+APP_VERSION;
 
 function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(()=>m.style.display='none',3500)}
@@ -157,7 +157,7 @@ PALETTE.forEach(c=>{
   b.onclick=()=>{$('color').value=c;markSw();savePrefs()};sw.appendChild(b);
 });
 function markSw(){const v=$('color').value.toLowerCase();picker.set(v);sw.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===v))}
-const picker=createColorPicker({input:$('color'),onChange:(c,final)=>{markSw();if(final)savePrefs()}});
+const picker=createColorPicker({mount:$('cp'),input:$('color'),onChange:(c,final)=>{markSw();if(final)savePrefs()}});
 markSw();
 $('width').oninput=e=>{const v=+e.target.value;widths[tool==='erase'?'erase':'draw']=v;$('wv').textContent=v;savePrefs()};
 function clearWork(all){
@@ -192,6 +192,7 @@ $('fit').onclick=fit;
 let spaceDown=false;
 function setCursor(){cv.style.cursor=panning?'grabbing':(tool==='pan'||spaceDown)?'grab':'crosshair'}
 addEventListener('keydown',e=>{
+  if(e.target.closest&&e.target.closest('dialog'))return;   // let dialogs handle their own keys
   if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();$('undo').click();return}
   if(e.code==='Space'&&e.target.tagName!=='BUTTON'&&e.target.tagName!=='INPUT'){e.preventDefault();spaceDown=true;setCursor()}
   const k={ArrowLeft:[60,0],ArrowRight:[-60,0],ArrowUp:[0,60],ArrowDown:[0,-60]}[e.key];
@@ -288,31 +289,61 @@ function importStatus(file){
   fr.readAsText(file);
 }
 
-/* ---------- export menu ---------- */
+/* ---------- main menu ---------- */
 (()=>{
-  const btn=$('exportBtn'),list=$('menuList');
-  const items=()=>[...list.querySelectorAll('button:not(:disabled)')];
+  const btn=$('menuBtn'),list=$('menuList'),sub=$('subNew'),miNew=$('miNew');
+  const items=()=>[...list.querySelectorAll('button:not(:disabled)')].filter(b=>b.offsetParent!==null);
+  function toggleSub(show){
+    sub.hidden=!show;miNew.setAttribute('aria-expanded',String(show));
+  }
   function open(){
-    list.hidden=false;list.style.left='';list.style.right='0';
-    if(list.getBoundingClientRect().left<4){list.style.right='auto';list.style.left='0'}
+    toggleSub(false);list.hidden=false;list.style.left='0';
+    const over=list.getBoundingClientRect().right-(innerWidth-6);
+    if(over>0)list.style.left=(-over)+'px';
     btn.setAttribute('aria-expanded','true');
   }
   function close(focusBtn){list.hidden=true;btn.setAttribute('aria-expanded','false');if(focusBtn)btn.focus()}
   btn.onclick=()=>{list.hidden?(open(),items()[0]?.focus()):close()};
-  addEventListener('pointerdown',e=>{if(!list.hidden&&!$('exportMenu').contains(e.target))close()});
+  addEventListener('pointerdown',e=>{if(!list.hidden&&!$('mainMenu').contains(e.target))close()});
   list.addEventListener('keydown',e=>{
     const it=items(),i=it.indexOf(document.activeElement);
     if(e.key==='Escape'){close(true)}
     else if(e.key==='ArrowDown'){it[(i+1)%it.length]?.focus()}
     else if(e.key==='ArrowUp'){it[(i-1+it.length)%it.length]?.focus()}
+    else if(e.key==='ArrowRight'&&document.activeElement===miNew){toggleSub(true);items()[i+1]?.focus()}
+    else if(e.key==='ArrowLeft'&&sub.contains(document.activeElement)){toggleSub(false);miNew.focus()}
     else return;
     e.preventDefault();e.stopPropagation();
   });
+  miNew.onclick=()=>toggleSub(sub.hidden);
+  $('miOpen').onclick=()=>{close();$('file').click()};
+  $('miEmpty').onclick=()=>{close();openNewDialog()};
   $('miJpeg').onclick=()=>{close();saveJpeg()};
   $('miExport').onclick=()=>{close();exportStatus()};
   $('miImport').onclick=()=>{close();$('importFile').click()};
   $('importFile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importStatus(f)};
 })();
+
+/* ---------- new empty image ---------- */
+const newDlg=$('newDlg');
+const newPicker=createColorPicker({mount:$('newCp'),input:$('newColor'),inline:true,onChange(){}});
+function openNewDialog(){
+  $('newErr').hidden=true;$('newColor').value='#ffffff';newPicker.set('#ffffff');
+  newDlg.showModal();
+}
+function createEmptyImage(){
+  const w=parseInt($('newW').value,10),h=parseInt($('newH').value,10);
+  if(!(w>=16&&w<=MAXDIM&&h>=16&&h<=MAXDIM)){
+    const e=$('newErr');e.textContent='Width and height must be whole numbers between 16 and '+MAXDIM+' px.';e.hidden=false;return;
+  }
+  if(ops.length&&!confirm('Creating a new image discards the current drawing. Continue?'))return;
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d');x.fillStyle=$('newColor').value;x.fillRect(0,0,w,h);
+  setBackground(c);cur=null;ops=[];persist(true);ui();fit();newDlg.close();
+}
+$('newOk').onclick=createEmptyImage;
+$('newCancel').onclick=()=>newDlg.close();
+newDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type==='number'){e.preventDefault();createEmptyImage()}});
 
 if('serviceWorker' in navigator){
   addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));

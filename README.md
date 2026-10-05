@@ -13,7 +13,7 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 - **Undo:** every stroke or shape is an operation in a history list; Undo (or Ctrl/Cmd+Z) removes the last one.
 - **Clear:** a click clears the drawing and keeps the background; a long press (about 0.7 s) removes the background too. Both ask for confirmation, and neither can be undone.
 - **Zoom and pan:** mouse wheel, pinch, or the −, Fit and + buttons to zoom. To pan, use the Move tool, two fingers, Space + drag, the right or middle mouse button, or the arrow keys.
-- **Export menu:** *Save JPEG* downloads the background and drawing merged at the background's full resolution. *Export status* downloads a JSON file with the background, the full list of operations and the saved settings (color and widths). *Import status* restores such a file, for example on another device.
+- **Main menu (☰):** *New* offers *Open image* and *Empty image* (you choose the width and height, up to 2400 px, and the background color; white by default). *Save JPEG* downloads the background and drawing merged at the background's full resolution. *Export status* downloads a JSON file with the background, the full list of operations and the saved settings (color and widths). *Import status* restores such a file, for example on another device.
 - **Persistence:** the background, the full operation list, the selected color and the tool widths are saved automatically and restored on reopening.
 - **Installable and offline:** a web app manifest and a service worker let you add the app to the home screen and use it without a connection.
 
@@ -23,7 +23,7 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 index.html              page markup
 css/style.css           styles
 js/markup.js            the application logic
-js/colorpicker.js       custom color picker (same look in every browser)
+js/colorpicker.js       custom color picker (same look in every browser; also used by the new-image dialog)
 sw.js                   service worker (offline support) – must stay in the root
 manifest.webmanifest    web app manifest (home screen install)
 img/
@@ -53,7 +53,7 @@ Upload all the files and folders to any static host (GitHub Pages, Netlify, Ngin
 
 - Serve over **HTTPS** so the service worker and the install option work (`localhost` is also fine for testing).
 - Serve `manifest.webmanifest` as `application/manifest+json` (or `application/json`).
-- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v10`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
+- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v11`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
 
 ### GitHub Pages
 
