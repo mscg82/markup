@@ -2,22 +2,28 @@
    Draws its own UI so it looks the same in every browser.
    Its labels come from the global t() function (see js/i18n.js).
 
-   createColorPicker({mount, input, onChange, inline}) -> {set(hex)}
+   createColorPicker({mount, input, onChange, inline, palette, fixed}) -> {set, close}
    - mount:    element the picker builds its UI into
    - input:    element whose .value holds the current "#rrggbb" color
    - onChange: called as onChange(hex, final) when the USER changes the color
                (final=false while dragging, true when the gesture ends)
    - inline:   false (default) = a color button that opens a popover;
                true = the picker panel is always visible
-   - set(hex): updates the picker UI from outside, without calling onChange */
-function createColorPicker({mount,input,onChange,inline=false}){
+   - palette:  optional array of "#rrggbb" colors; shown as small circles beside
+               the picker inside the popover
+   - fixed:    position the popover relative to the viewport instead of the button,
+               so it is not clipped inside scrolling containers such as dialogs
+   - set(hex): updates the picker UI from outside, without calling onChange
+   - close():  closes the popover */
+function createColorPicker({mount,input,onChange,inline=false,palette=null,fixed=false}){
   mount.classList.add('cp');mount.classList.toggle('inline',inline);
-  mount.innerHTML=(inline?'':`<button type="button" class="cp-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="${t('picker.button')}" title="${t('picker.button')}"><span class="cp-chip"></span></button>`)+
-    `<div class="cp-pop" role="group" aria-label="${t('picker.panel')}"${inline?'':' hidden'}>
+  const main=`
       <div class="cp-sv" tabindex="0" role="slider" aria-label="${t('picker.sv')}"><div class="cp-knob"></div></div>
       <div class="cp-hue" tabindex="0" role="slider" aria-label="${t('picker.hue')}"><div class="cp-knob"></div></div>
-      <div class="cp-row"><span class="cp-prev"></span><input class="cp-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="${t('picker.hex')}"></div>
-    </div>`;
+      <div class="cp-row"><span class="cp-prev"></span><input class="cp-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="${t('picker.hex')}"></div>`;
+  mount.innerHTML=(inline?'':`<button type="button" class="cp-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="${t('picker.button')}" title="${t('picker.button')}"><span class="cp-chip"></span></button>`)+
+    `<div class="cp-pop${palette?' has-palette':''}${fixed?' fixed':''}" role="group" aria-label="${t('picker.panel')}"${inline?'':' hidden'}>`+
+    (palette?`<div class="cp-main">${main}</div><div class="cp-swatches"></div>`:main)+`</div>`;
   const q=sel=>mount.querySelector(sel);
   const btn=q('.cp-btn'),chip=q('.cp-chip'),pop=q('.cp-pop');
   const svEl=q('.cp-sv'),svK=svEl.firstElementChild,hueEl=q('.cp-hue'),hueK=hueEl.firstElementChild;
@@ -47,6 +53,19 @@ function createColorPicker({mount,input,onChange,inline=false}){
   const fromHex=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16));
   const hex=()=>toHex(...hsv2rgb(h,s,v));
 
+  // palette circles (optional)
+  const swBtns=[];
+  if(palette){
+    const box=q('.cp-swatches');
+    palette.forEach(c=>{
+      const b=document.createElement('button');
+      b.type='button';b.style.background=c;b.dataset.c=c;b.title=c;
+      b.setAttribute('aria-label',t('color.swatch',{color:c}));
+      b.onclick=()=>pick(c);
+      box.appendChild(b);swBtns.push(b);
+    });
+  }
+
   function paint(c){
     c=c||hex();
     svEl.style.backgroundColor=`hsl(${h},100%,50%)`;
@@ -55,9 +74,15 @@ function createColorPicker({mount,input,onChange,inline=false}){
     if(chip)chip.style.background=c;
     prev.style.background=c;
     if(document.activeElement!==hexIn)hexIn.value=c;
+    swBtns.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.c===c.toLowerCase())));
   }
   function emit(final,c){
     c=c||hex();input.value=c;paint(c);onChange(c,final);
+  }
+  // choose an exact color (from the hex field or the palette)
+  function pick(c){
+    const [nh,ns,nv]=rgb2hsv(...fromHex(c));
+    if(ns>0&&nv>0)h=nh;s=ns;v=nv;emit(true,c);
   }
 
   function drag(el,fn){
@@ -90,29 +115,34 @@ function createColorPicker({mount,input,onChange,inline=false}){
   });
 
   // hex field
-  hexIn.addEventListener('input',()=>{
-    const c=parseHex(hexIn.value);if(!c)return;
-    const [nh,ns,nv]=rgb2hsv(...fromHex(c));
-    if(ns>0&&nv>0)h=nh;s=ns;v=nv;emit(true,c);
-  });
+  hexIn.addEventListener('input',()=>{const c=parseHex(hexIn.value);if(c)pick(c)});
   hexIn.addEventListener('blur',()=>{hexIn.value=input.value});
 
   // popover (button mode only)
   pop.addEventListener('keydown',e=>{
     if(inline)return;
     e.stopPropagation();                 // keep arrows/space from panning the canvas
-    if(e.key==='Escape'||e.key==='Enter'&&e.target!==hexIn)close(true);
+    if(e.key==='Escape'){e.preventDefault();close(true)}     // close only the popover, not a dialog around it
+    else if(e.key==='Enter'&&e.target!==hexIn)close(true);
   });
-  function open(){
-    pop.hidden=false;pop.style.left='0';
-    const over=pop.getBoundingClientRect().right-(innerWidth-6);
-    if(over>0)pop.style.left=(-over)+'px';
-    btn.setAttribute('aria-expanded','true');
+  function place(){
+    if(fixed){                           // viewport coordinates, kept fully on screen
+      const b=btn.getBoundingClientRect(),w=pop.offsetWidth,ph=pop.offsetHeight,m=6;
+      let top=b.bottom+6;
+      if(top+ph>innerHeight-m){const up=b.top-6-ph;top=up>=m?up:Math.max(m,innerHeight-ph-m)}
+      pop.style.left=clamp(b.left,m,Math.max(m,innerWidth-w-m))+'px';pop.style.top=top+'px';
+    }else{
+      pop.style.left='0';
+      const over=pop.getBoundingClientRect().right-(innerWidth-6);
+      if(over>0)pop.style.left=(-over)+'px';
+    }
   }
-  function close(focus){pop.hidden=true;btn.setAttribute('aria-expanded','false');if(focus)btn.focus()}
+  function open(){pop.hidden=false;place();btn.setAttribute('aria-expanded','true')}
+  function close(focus){pop.hidden=true;btn&&btn.setAttribute('aria-expanded','false');if(focus&&btn)btn.focus()}
   if(!inline){
     btn.addEventListener('click',()=>pop.hidden?open():close());
     addEventListener('pointerdown',e=>{if(!pop.hidden&&!mount.contains(e.target))close()});
+    addEventListener('resize',()=>{if(!pop.hidden)place()});
   }
 
   function set(c){
@@ -122,5 +152,5 @@ function createColorPicker({mount,input,onChange,inline=false}){
     if(ns>0&&nv>0)h=nh;s=ns;v=nv;paint(c);
   }
   set(input.value);paint(input.value);
-  return{set};
+  return{set,close:()=>{if(!inline)close(false)}};
 }

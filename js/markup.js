@@ -461,9 +461,9 @@ setDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='IN
 
 /* ---------- new empty image ---------- */
 const newDlg=$('newDlg');
-const newPicker=createColorPicker({mount:$('newCp'),input:$('newColor'),inline:true,onChange(){}});
+const newPicker=createColorPicker({mount:$('newCp'),input:$('newColor'),palette:PALETTE,fixed:true,onChange(){}});
 function openNewDialog(){
-  $('newErr').hidden=true;$('newColor').value='#ffffff';newPicker.set('#ffffff');
+  $('newErr').hidden=true;$('newColor').value='#ffffff';newPicker.set('#ffffff');newPicker.close();
   $('newW').value=settings.newW;$('newH').value=settings.newH;   // the default size from Settings
   newDlg.showModal();
 }
