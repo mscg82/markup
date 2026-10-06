@@ -1,12 +1,29 @@
-(()=>{
+i18n.ready.then(()=>{          // wait until the locale strings are loaded
 const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
 let bg=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
 const ptrs=new Map();let pinch=null,last=null,fillTap=null;
 const MAXDIM=2400;
-const APP_VERSION='v13';   // keep in step with CACHE in sw.js
-$('ver').textContent='Markup '+APP_VERSION;
+const APP_VERSION='v14';   // keep in step with CACHE in sw.js
+$('ver').textContent=t('app.version',{version:APP_VERSION});
+
+/* ---------- settings (persisted in localStorage) ---------- */
+const SETTINGS_KEY='markup.settings';
+const validSize=v=>Number.isInteger(v)&&v>=16&&v<=MAXDIM;
+let settings={lang:'auto',newW:1600,newH:1200};
+try{
+  const p=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'null');
+  if(p){
+    if(typeof p.lang==='string'&&/^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$/.test(p.lang))settings.lang=p.lang;
+    if(validSize(p.newW))settings.newW=p.newW;
+    if(validSize(p.newH))settings.newH=p.newH;
+  }
+}catch(e){}
+function saveSettings(){
+  try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings))}catch(e){msg(t('msg.storageFull'))}
+}
+
 
 function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(()=>m.style.display='none',3500)}
 
@@ -200,8 +217,8 @@ try{
   const p=JSON.parse(localStorage.getItem(PK)||'null');
   if(p){
     if(/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
-    if(p.draw>=1&&p.draw<=80)widths.draw=+p.draw;
-    if(p.erase>=1&&p.erase<=80)widths.erase=+p.erase;
+    if(p.draw>=1&&p.draw<=80)widths.draw=(+p.draw);
+    if(p.erase>=1&&p.erase<=80)widths.erase=(+p.erase);
   }
 }catch(e){}
 syncWidth();
@@ -209,22 +226,22 @@ const PALETTE=['#e63946','#f77f00','#fcbf49','#2a9d8f','#06d6a0','#118ab2','#7b2
   '#000000','#4a4a4a','#9a9a9a','#ffffff','#8b5a2b','#1d3557','#a7c957','#00b4d8'];
 const sw=$('sw');
 PALETTE.forEach(c=>{
-  const b=document.createElement('button');b.style.background=c;b.dataset.c=c;b.title=c;b.setAttribute('aria-label','Color '+c);
+  const b=document.createElement('button');b.style.background=c;b.dataset.c=c;b.title=c;b.setAttribute('aria-label',t('color.swatch',{color:c}));
   b.onclick=()=>{$('color').value=c;markSw();savePrefs()};sw.appendChild(b);
 });
 function markSw(){const v=$('color').value.toLowerCase();picker.set(v);sw.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===v))}
 const picker=createColorPicker({mount:$('cp'),input:$('color'),onChange:(c,final)=>{markSw();if(final)savePrefs()}});
 markSw();
-$('width').oninput=e=>{const v=+e.target.value;widths[tool==='erase'?'erase':'draw']=v;$('wv').textContent=v;savePrefs()};
+$('width').oninput=e=>{const v=(+e.target.value);widths[tool==='erase'?'erase':'draw']=v;$('wv').textContent=v;savePrefs()};
 function clearWork(all){
-  if(!all&&!ops.length){msg('Nothing to clear.');return}
-  if(!confirm(all?'Remove the drawing AND the background image? This cannot be undone.':'Clear everything you have drawn? The background image stays. This cannot be undone.'))return;
+  if(!all&&!ops.length){msg(t('msg.nothingToClear'));return}
+  if(!confirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
   cur=null;ops=[];redoStack=[];resetNames();
   if(all){
     bg=L=lc=null;
     try{localStorage.removeItem('markup.bg');localStorage.removeItem('markup.ops')}catch(e){}
-    msg('Drawing and image removed.');
-  }else{replay();persist();msg('Drawing cleared.')}
+    msg(t('msg.removedAll'));
+  }else{replay();persist();msg(t('msg.cleared'))}
   ui();render();
 }
 (()=>{
@@ -271,10 +288,10 @@ function setBackground(img){
 }
 $('file').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
-  if(ops.length&&!confirm('Opening a new image discards the current drawing. Continue?'))return;
+  if(ops.length&&!confirm(t('confirm.openImage')))return;
   const url=URL.createObjectURL(f),img=new Image();
   img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];resetNames();persist(true);ui();fit()};
-  img.onerror=()=>msg('That file could not be read as an image.');
+  img.onerror=()=>msg(t('msg.badImage'));
   img.src=url;
 };
 
@@ -283,7 +300,7 @@ function persist(withBg){
   try{
     if(withBg)localStorage.setItem('markup.bg',bg.toDataURL('image/jpeg',.88));
     localStorage.setItem('markup.ops',JSON.stringify(ops));
-  }catch(err){msg('Browser storage is full – your work is not being saved. Try a smaller image.')}
+  }catch(err){msg(t('msg.storageFull'))}
 }
 function restore(){
   try{
@@ -328,24 +345,24 @@ function validOp(o){
 }
 function importStatus(file){
   const fr=new FileReader();
-  fr.onerror=()=>msg('The file could not be read.');
+  fr.onerror=()=>msg(t('msg.fileRead'));
   fr.onload=()=>{
     let st;
-    try{st=JSON.parse(fr.result)}catch(e){msg('This is not a valid JSON file.');return}
+    try{st=JSON.parse(fr.result)}catch(e){msg(t('msg.badJson'));return}
     if(!st||st.format!=='markup-status'||typeof st.background!=='string'||!st.background.startsWith('data:image/')||!Array.isArray(st.operations)||!st.operations.every(validOp)){
-      msg('This file is not a valid Markup status export.');return;
+      msg(t('msg.badStatus'));return;
     }
-    if(bg&&!confirm('Importing replaces the current image and drawing. Continue?'))return;
+    if(bg&&!confirm(t('confirm.import')))return;
     const img=new Image();
     img.onload=()=>{
       setBackground(img);cur=null;ops=st.operations;redoStack=[];resetNames();replay();
       const p=st.preferences||{};
       if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
-      if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=+p.drawWidth;
-      if(p.eraseWidth>=1&&p.eraseWidth<=80)widths.erase=+p.eraseWidth;
-      syncWidth();markSw();savePrefs();persist(true);ui();fit();msg('Status imported.');
+      if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
+      if(p.eraseWidth>=1&&p.eraseWidth<=80)widths.erase=(+p.eraseWidth);
+      syncWidth();markSw();savePrefs();persist(true);ui();fit();msg(t('msg.imported'));
     };
-    img.onerror=()=>msg('The background image in this file could not be loaded.');
+    img.onerror=()=>msg(t('msg.badBackground'));
     img.src=st.background;
   };
   fr.readAsText(file);
@@ -383,6 +400,7 @@ function importStatus(file){
   $('miJpeg').onclick=()=>{close();askFileName('jpeg')};
   $('miExport').onclick=()=>{close();askFileName('status')};
   $('miImport').onclick=()=>{close();$('importFile').click()};
+  $('miSettings').onclick=()=>{close();openSettings()};
   $('importFile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importStatus(f)};
 })();
 
@@ -412,19 +430,49 @@ function importStatus(file){
   });
 })();
 
+/* ---------- settings dialog ---------- */
+const setDlg=$('settingsDlg');
+async function openSettings(){
+  $('setErr').hidden=true;
+  const sel=$('setLang'),langs=await i18n.languages();
+  sel.innerHTML='';
+  sel.add(new Option(t('settings.langAuto'),'auto'));
+  langs.forEach(l=>sel.add(new Option(l.name,l.code)));
+  sel.value=[...sel.options].some(o=>o.value===settings.lang)?settings.lang:'auto';
+  $('setW').value=settings.newW;$('setH').value=settings.newH;
+  setDlg.showModal();
+}
+function applySettings(){
+  const w=parseInt($('setW').value,10),h=parseInt($('setH').value,10);
+  if(!validSize(w)||!validSize(h)){
+    const e=$('setErr');e.textContent=t('newdlg.error',{min:16,max:MAXDIM});e.hidden=false;return;
+  }
+  const lang=$('setLang').value,langChanged=lang!==settings.lang;
+  settings={lang,newW:w,newH:h};saveSettings();setDlg.close();
+  if(langChanged){            // strings are applied at startup, so reload to use the new language
+    const u=new URL(location.href);
+    if(u.searchParams.has('lang')){u.searchParams.delete('lang');location.replace(u.href)}   // ?lang= would override the setting
+    else location.reload();
+  }
+}
+$('setOk').onclick=applySettings;
+$('setCancel').onclick=()=>setDlg.close();
+setDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();applySettings()}});
+
 /* ---------- new empty image ---------- */
 const newDlg=$('newDlg');
 const newPicker=createColorPicker({mount:$('newCp'),input:$('newColor'),inline:true,onChange(){}});
 function openNewDialog(){
   $('newErr').hidden=true;$('newColor').value='#ffffff';newPicker.set('#ffffff');
+  $('newW').value=settings.newW;$('newH').value=settings.newH;   // the default size from Settings
   newDlg.showModal();
 }
 function createEmptyImage(){
   const w=parseInt($('newW').value,10),h=parseInt($('newH').value,10);
   if(!(w>=16&&w<=MAXDIM&&h>=16&&h<=MAXDIM)){
-    const e=$('newErr');e.textContent='Width and height must be whole numbers between 16 and '+MAXDIM+' px.';e.hidden=false;return;
+    const e=$('newErr');e.textContent=t('newdlg.error',{min:16,max:MAXDIM});e.hidden=false;return;
   }
-  if(ops.length&&!confirm('Creating a new image discards the current drawing. Continue?'))return;
+  if(ops.length&&!confirm(t('confirm.newImage')))return;
   const c=document.createElement('canvas');c.width=w;c.height=h;
   const x=c.getContext('2d');x.fillStyle=$('newColor').value;x.fillRect(0,0,w,h);
   setBackground(c);cur=null;ops=[];redoStack=[];resetNames();persist(true);ui();fit();newDlg.close();
@@ -441,20 +489,20 @@ let names={};
 try{names=JSON.parse(localStorage.getItem(NAMES_KEY)||'{}')||{}}catch(e){names={}}
 function resetNames(){names={};try{localStorage.removeItem(NAMES_KEY)}catch(e){}}
 const FILE_KINDS={
-  jpeg:{title:'Save JPEG',button:'Save',ext:'.jpg',def:'markup',strip:/\.jpe?g$/i,run:n=>saveJpeg(n)},
-  status:{title:'Export status',button:'Export',ext:'.json',def:'markup-status',strip:/\.json$/i,run:n=>exportStatus(n)}
+  jpeg:{key:'file.jpeg',ext:'.jpg',strip:/\.jpe?g$/i,run:n=>saveJpeg(n)},
+  status:{key:'file.status',ext:'.json',strip:/\.json$/i,run:n=>exportStatus(n)}
 };
 const nameDlg=$('nameDlg');let nameKind=null;
 function askFileName(kind){
   nameKind=kind;const k=FILE_KINDS[kind];
-  $('nameTitle').textContent=k.title;$('nameExt').textContent=k.ext;$('nameOk').textContent=k.button;
-  $('nameErr').hidden=true;$('nameInput').value=names[kind]||k.def;
+  $('nameTitle').textContent=t(k.key+'.title');$('nameExt').textContent=k.ext;$('nameOk').textContent=t(k.key+'.button');
+  $('nameErr').hidden=true;$('nameInput').value=names[kind]||t(k.key+'.default');
   nameDlg.showModal();$('nameInput').select();
 }
 function confirmFileName(){
   const k=FILE_KINDS[nameKind];
   const n=$('nameInput').value.replace(/[\\/:*?"<>|\u0000-\u001f]/g,'').trim().replace(k.strip,'').replace(/[. ]+$/,'');
-  if(!n){const e=$('nameErr');e.textContent='Please enter a file name.';e.hidden=false;return}
+  if(!n){const e=$('nameErr');e.textContent=t('namedlg.error');e.hidden=false;return}
   names[nameKind]=n;
   try{localStorage.setItem(NAMES_KEY,JSON.stringify(names))}catch(e){}
   nameDlg.close();k.run(n+k.ext);
@@ -470,4 +518,4 @@ if('serviceWorker' in navigator){
 new ResizeObserver(()=>{resize()}).observe(stage);
 addEventListener('resize',()=>{resize();});
 resize();ui();restore();
-})();
+});

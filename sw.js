@@ -1,8 +1,10 @@
 // Bump CACHE when you deploy a new version so clients drop old files.
-const CACHE = 'markup-v13';
+const CACHE = 'markup-v14';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
-  './css/style.css', './js/markup.js', './js/colorpicker.js',
+  './css/style.css', './js/markup.js', './js/colorpicker.js', './js/i18n.js',
+  './locale/languages.json',
+  './locale/en.json', './locale/it.json',   // add every new language file here
   './img/favicon.ico', './img/favicon.svg', './img/apple-touch-icon.png',
   './img/icon-48.png', './img/icon-96.png', './img/icon-144.png',
   './img/icon-192.png', './img/icon-512.png', './img/icon-maskable-512.png'

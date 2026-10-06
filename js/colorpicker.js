@@ -1,5 +1,6 @@
 /* Custom color picker (saturation/value square + hue bar + hex field).
    Draws its own UI so it looks the same in every browser.
+   Its labels come from the global t() function (see js/i18n.js).
 
    createColorPicker({mount, input, onChange, inline}) -> {set(hex)}
    - mount:    element the picker builds its UI into
@@ -11,11 +12,11 @@
    - set(hex): updates the picker UI from outside, without calling onChange */
 function createColorPicker({mount,input,onChange,inline=false}){
   mount.classList.add('cp');mount.classList.toggle('inline',inline);
-  mount.innerHTML=(inline?'':'<button type="button" class="cp-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Custom color" title="Custom color"><span class="cp-chip"></span></button>')+
-    `<div class="cp-pop" role="group" aria-label="Choose a color"${inline?'':' hidden'}>
-      <div class="cp-sv" tabindex="0" role="slider" aria-label="Saturation and brightness"><div class="cp-knob"></div></div>
-      <div class="cp-hue" tabindex="0" role="slider" aria-label="Hue"><div class="cp-knob"></div></div>
-      <div class="cp-row"><span class="cp-prev"></span><input class="cp-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Hex color"></div>
+  mount.innerHTML=(inline?'':`<button type="button" class="cp-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="${t('picker.button')}" title="${t('picker.button')}"><span class="cp-chip"></span></button>`)+
+    `<div class="cp-pop" role="group" aria-label="${t('picker.panel')}"${inline?'':' hidden'}>
+      <div class="cp-sv" tabindex="0" role="slider" aria-label="${t('picker.sv')}"><div class="cp-knob"></div></div>
+      <div class="cp-hue" tabindex="0" role="slider" aria-label="${t('picker.hue')}"><div class="cp-knob"></div></div>
+      <div class="cp-row"><span class="cp-prev"></span><input class="cp-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="${t('picker.hex')}"></div>
     </div>`;
   const q=sel=>mount.querySelector(sel);
   const btn=q('.cp-btn'),chip=q('.cp-chip'),pop=q('.cp-pop');

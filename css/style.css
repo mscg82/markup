@@ -45,7 +45,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;displa
 .cp-hue .cp-knob{top:50%}
 .cp-row{display:flex;gap:8px;align-items:center}
 .cp-prev{width:36px;height:34px;border-radius:6px;border:1px solid var(--line);flex:none}
-.cp-hex,dialog input[type=number],dialog input[type=text]{background:#394147;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-height:36px;font:inherit}
+.cp-hex,dialog input[type=number],dialog input[type=text],dialog select{background:#394147;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-height:36px;font:inherit}
 .cp-hex{flex:1;min-width:0;font-family:ui-monospace,Menlo,Consolas,monospace}
 
 /* main (hamburger) menu */
@@ -83,3 +83,9 @@ label.dlg-label{display:block}
 #shapesList button{width:100%;gap:10px;justify-content:flex-start;text-align:left;background:transparent;border-color:transparent}
 #shapesList button:hover{background:#445057}
 #shapesList button[aria-pressed=true]{background:var(--acc);color:#1b1b1b;border-color:var(--acc)}
+
+/* avoid a flash of empty labels while the locale file loads */
+html:not(.i18n-ready) body{visibility:hidden}
+.dlg-field{display:flex;flex-direction:column;gap:4px;color:var(--mute);font-size:12px}
+.dlg-field select{width:100%;color:var(--ink);font-size:14px}
+.dlg-note{color:var(--mute);font-size:12px;margin:6px 0 14px}

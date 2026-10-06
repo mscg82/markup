@@ -4,7 +4,7 @@
 Maintain and extend "Markup", a fully client-side web app for drawing over a background image. Static hosting only; all logic and state live in the browser. Primary target: Chrome (desktop and Android); must also work on mobile browsers (Firefox on Android tablets included).
 
 ## Files (uploaded as project knowledge)
-index.html (markup), css/style.css, js/markup.js (app logic), js/colorpicker.js (custom color picker), sw.js (service worker, must stay in the root for scope), manifest.webmanifest, img/ (favicon.ico/svg, icon-48/96/144/192/512, icon-maskable-512, apple-touch-icon), README.md.
+index.html (markup), css/style.css, js/markup.js (app logic), js/colorpicker.js (custom color picker), js/i18n.js, locale/languages.json (selectable languages) and locale/*.json (all user-visible strings; never hard-code text in HTML or JS, add a key to locale/en.json and use data-i18n* attributes or t()), sw.js (service worker, must stay in the root for scope), manifest.webmanifest, img/ (favicon.ico/svg, icon-48/96/144/192/512, icon-maskable-512, apple-touch-icon), README.md.
 
 ## Architecture rules
 - No backend, no build step, no external dependencies. Keep the structure: markup in index.html, styles in css/style.css, logic in js/markup.js.
@@ -14,7 +14,7 @@ index.html (markup), css/style.css, js/markup.js (app logic), js/colorpicker.js 
 - Clear button: click = clear drawing, long press (700 ms) = also remove background; both use confirm() and are not undoable.
 - Export: merge background + layer at full resolution to JPEG.
 - localStorage keys: markup.bg (JPEG data URL), markup.ops (operations JSON), markup.prefs (color, draw width, erase width). Always wrap storage access in try/catch and warn the user if saving fails.
-- Offline: sw.js uses stale-while-revalidate. When any cached file changes or is added, add it to ASSETS and bump CACHE (currently markup-v13) and keep APP_VERSION in js/markup.js (shown in the app's bottom-right corner) in step with it.
+- Offline: sw.js uses stale-while-revalidate. When a cached file is added, add it to ASSETS. Do NOT bump CACHE (currently markup-v14) or APP_VERSION in js/markup.js (shown in the app's bottom-right corner) unless the owner explicitly asks; when asked, change both together.
 - Icons: Firefox Android ignores SVG for shortcuts, so keep raster icons and favicon.ico declared before the SVG in <head>.
 
 ## Working style
@@ -24,3 +24,6 @@ index.html (markup), css/style.css, js/markup.js (app logic), js/colorpicker.js 
 
 ## Ideas not yet done
 fill option for shapes, remembering the selected tool, text tool, offline update notification.
+
+## Code conventions
+- When converting a value to a number with unary plus in an assignment, always write `a=(+b)`, never `a=+b`, so it is not mistaken for `+=`.
