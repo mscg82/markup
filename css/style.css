@@ -17,8 +17,8 @@ input[type=range]{width:110px;accent-color:var(--acc)}
 #menuList[hidden]{display:none}
 #menuList button{background:transparent;border:0;text-align:left;width:100%}
 #menuList button:hover:not(:disabled),#menuList button:focus-visible{background:#445057}
-.gw{flex:1 1 300px}
-.gw input[type=range]{flex:1;width:auto;min-width:110px}
+.gw{flex:1 1 auto}
+.gw input[type=range]{flex:1 1 60px;width:60px;min-width:60px}   /* short by default; grows only into free space */
 button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 #clear{background-image:linear-gradient(#c0392b,#c0392b);background-repeat:no-repeat;background-size:0% 100%;transition:background-size 0s;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 #clear.holding{background-size:100% 100%;transition:background-size .7s linear}
@@ -99,3 +99,15 @@ html:not(.i18n-ready) body{visibility:hidden}
 .cp-swatches{display:grid;grid-template-columns:repeat(2,22px);gap:4px;align-content:start}
 .cp-swatches button{width:22px;height:22px;min-height:0;padding:0;border-radius:50%;border:2px solid var(--line)}
 .cp-swatches button[aria-pressed=true]{border-color:#fff;box-shadow:0 0 0 2px var(--acc)}
+
+/* Toolbar color picker. On wide screens the palette circles are always visible next to it;
+   on narrower screens they are folded into the picker popover (like in the new-image dialog). */
+@media (min-width:1041px){
+  #cp .cp-swatches{display:none}
+  #cp .cp-pop.has-palette{flex-direction:column;align-items:stretch;width:220px}
+  #cp .cp-pop.has-palette .cp-main{width:auto}
+  #cp .cp-pop.has-palette .cp-sv{height:150px}
+}
+@media (max-width:1040px){
+  #sw{display:none}
+}

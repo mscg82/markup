@@ -26,7 +26,7 @@
   "tool.fill.label": "Riempimento",
   "tool.fill.title": "Riempimento – riempie un'area con il colore selezionato",
   "tool.shapes.label": "Forme",
-  "tool.shapes.title": "Forme – linea, rettangolo, cerchio",
+  "tool.shapes.title": "Forme – linea, rettangolo, cerchio, stella",
   "tool.line.label": "Linea",
   "tool.line.title": "Linea – linea retta",
   "tool.rect.label": "Rettangolo",
@@ -89,5 +89,7 @@
   "settings.langAuto": "Automatica (lingua del browser)",
   "settings.langNote": "Cambiare la lingua ricarica l'applicazione. Il disegno viene conservato, ma la cronologia di ripristino (Ripeti) viene persa.",
   "settings.newSize": "Dimensioni predefinite di una nuova immagine",
-  "settings.save": "Salva"
+  "settings.save": "Salva",
+  "tool.star.label": "Stella",
+  "tool.star.title": "Stella – trascina dal centro verso l'esterno"
 }

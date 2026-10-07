@@ -26,7 +26,7 @@
   "tool.fill.label": "Fill",
   "tool.fill.title": "Fill – flood-fill an area with the selected color",
   "tool.shapes.label": "Shapes",
-  "tool.shapes.title": "Shapes – line, rectangle, circle",
+  "tool.shapes.title": "Shapes – line, rectangle, circle, star",
   "tool.line.label": "Line",
   "tool.line.title": "Line – straight line",
   "tool.rect.label": "Rectangle",
@@ -89,5 +89,7 @@
   "settings.langAuto": "Automatic (browser language)",
   "settings.langNote": "Changing the language reloads the application. Your drawing is kept, but the redo history is lost.",
   "settings.newSize": "Default size of a new image",
-  "settings.save": "Save"
+  "settings.save": "Save",
+  "tool.star.label": "Star",
+  "tool.star.title": "Star – drag from the center outward"
 }

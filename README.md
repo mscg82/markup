@@ -7,7 +7,7 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 ## Features
 
 - **Background image:** load any image; it is used as an unmodifiable background. Images larger than 2400 px on the long side are downscaled so they fit in browser storage.
-- **Drawing tools:** freehand pen, a **Fill** (flood fill) tool, plus a **Shapes** menu with straight line, rectangle and circle (the circle is dragged from the center outward). The Shapes button shows the icon of the shape you picked last.
+- **Drawing tools:** freehand pen, a **Fill** (flood fill) tool, plus a **Shapes** menu with straight line, rectangle, circle and a classic 5-pointed star (the circle and the star are dragged from the center outward; the star has one point up and is inscribed in the circle you drag). The Shapes button shows the icon of the shape you picked last.
 - **Fill:** tap an area to flood-fill it with the selected color. The background image is ignored: only what you drew (lines, shapes, earlier fills) acts as a boundary, so a closed shape can be filled, and tapping on a blank area with nothing around it fills the whole image. Tapping on something you already drew or filled recolors the connected area of that same color. The fill is an ordinary history entry, so Undo and Redo work on it.
 - **Color and width:** a built-in custom color picker (it looks the same in every browser) plus 16 quick-select swatches, and a width slider. The pen, line and shape tools share one width setting; the eraser has its own.
 - **Eraser:** removes only your drawing, never the background.
@@ -59,7 +59,7 @@ Upload all the files and folders to any static host (GitHub Pages, Netlify, Ngin
 
 - Serve over **HTTPS** so the service worker and the install option work (`localhost` is also fine for testing).
 - Serve `manifest.webmanifest` as `application/manifest+json` (or `application/json`).
-- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v15`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
+- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v16`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
 
 ### GitHub Pages
 
