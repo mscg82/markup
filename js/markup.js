@@ -6,6 +6,17 @@ const widths={draw:6,erase:24};
 const ptrs=new Map();let pinch=null,last=null,fillTap=null,tapTrack=null;
 let pending=null;   // rectangle/circle/star that has been drawn but not placed yet (see "pending shape" below)
 const MAXDIM=2400;
+// Place a popup (absolutely positioned inside a position:relative wrapper) so that it never goes past the
+// screen edges. On mobile browsers window.innerWidth GROWS when a popup overflows to the right, so the
+// stable documentElement.clientWidth is used instead.
+function keepOnScreen(el){
+  el.style.left='0';
+  const vw=document.documentElement.clientWidth,r=el.getBoundingClientRect(),m=6;
+  let shift=0;
+  if(r.right>vw-m)shift=(vw-m)-r.right;     // too far right: move left
+  if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
+  el.style.left=shift+'px';
+}
 const APP_VERSION='v16';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
@@ -276,8 +287,11 @@ document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
   syncWidth();setCursor();
 });
 function syncWidth(){
-  const v=tool==='erase'?widths.erase:widths.draw;$('width').value=v;$('wv').textContent=v;
+  const v=tool==='erase'?widths.erase:widths.draw;
+  $('width').value=v;$('widthL').value=v;                       // inline slider and popup slider
+  $('wv').textContent=v;$('wvPop').textContent=v;$('wvBtn').textContent=v;
 }
+function setWidth(v){widths[tool==='erase'?'erase':'draw']=v;syncWidth();savePrefs()}
 const PK='markup.prefs';
 function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,draw:widths.draw,erase:widths.erase}))}catch(e){}}
 try{
@@ -299,7 +313,8 @@ PALETTE.forEach(c=>{
 function markSw(){const v=$('color').value.toLowerCase();picker.set(v);sw.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===v))}
 const picker=createColorPicker({mount:$('cp'),input:$('color'),palette:PALETTE,onChange:(c,final)=>{markSw();if(final)savePrefs()}});
 markSw();
-$('width').oninput=e=>{const v=(+e.target.value);widths[tool==='erase'?'erase':'draw']=v;$('wv').textContent=v;savePrefs()};
+$('width').oninput=e=>setWidth((+e.target.value));
+$('widthL').oninput=e=>setWidth((+e.target.value));
 function clearWork(all){
   if(!all&&!ops.length&&!pending){msg(t('msg.nothingToClear'));return}
   if(!confirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
@@ -443,9 +458,7 @@ function importStatus(file){
     sub.hidden=!show;miNew.setAttribute('aria-expanded',String(show));
   }
   function open(){
-    toggleSub(false);list.hidden=false;list.style.left='0';
-    const over=list.getBoundingClientRect().right-(innerWidth-6);
-    if(over>0)list.style.left=(-over)+'px';
+    toggleSub(false);list.hidden=false;keepOnScreen(list);
     btn.setAttribute('aria-expanded','true');
   }
   function close(focusBtn){list.hidden=true;btn.setAttribute('aria-expanded','false');if(focusBtn)btn.focus()}
@@ -476,9 +489,7 @@ function importStatus(file){
   const btn=$('shapesBtn'),list=$('shapesList');
   const items=()=>[...list.querySelectorAll('button')];
   function open(){
-    list.hidden=false;list.style.left='0';
-    const over=list.getBoundingClientRect().right-(innerWidth-6);
-    if(over>0)list.style.left=(-over)+'px';
+    list.hidden=false;keepOnScreen(list);
     btn.setAttribute('aria-expanded','true');
   }
   function close(focusBtn){list.hidden=true;btn.setAttribute('aria-expanded','false');if(focusBtn)btn.focus()}
@@ -526,6 +537,34 @@ $('setOk').onclick=applySettings;
 $('setCancel').onclick=()=>setDlg.close();
 setDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();applySettings()}});
 
+/* ---------- line width: inline slider or popup ---------- */
+// If the inline slider would end up shorter than MIN_INLINE_WIDTH, the width control collapses into
+// a button that opens a popup with a longer slider. Each pass starts from the inline layout and
+// measures it, so the result depends only on the available space (no flip-flopping).
+const MIN_INLINE_WIDTH=250;
+const widthBtn=$('widthBtn'),widthPop=$('widthPop');
+function closeWidthPop(focusBtn){
+  widthPop.hidden=true;widthBtn.setAttribute('aria-expanded','false');if(focusBtn)widthBtn.focus();
+}
+function openWidthPop(){
+  widthPop.hidden=false;keepOnScreen(widthPop);
+  widthBtn.setAttribute('aria-expanded','true');
+}
+widthBtn.onclick=()=>{if(widthPop.hidden){openWidthPop();$('widthL').focus()}else closeWidthPop()};
+addEventListener('pointerdown',e=>{if(!widthPop.hidden&&!$('widthMenu').contains(e.target))closeWidthPop()});
+widthPop.addEventListener('keydown',e=>{
+  e.stopPropagation();                       // keep arrows/space from panning the canvas
+  if(e.key==='Escape'||e.key==='Enter'){e.preventDefault();closeWidthPop(true)}
+});
+function layoutWidth(){
+  const hdr=document.querySelector('header');
+  hdr.classList.remove('wpop');
+  const collapse=$('width').getBoundingClientRect().width<MIN_INLINE_WIDTH;
+  hdr.classList.toggle('wpop',collapse);
+  if(!collapse)closeWidthPop();
+  else if(!widthPop.hidden)openWidthPop();   // keep an open popup inside the screen
+}
+
 /* ---------- new empty image ---------- */
 const newDlg=$('newDlg');
 const newPicker=createColorPicker({mount:$('newCp'),input:$('newColor'),palette:PALETTE,fixed:true,onChange(){}});
@@ -533,6 +572,8 @@ function openNewDialog(){
   $('newErr').hidden=true;$('newColor').value='#ffffff';newPicker.set('#ffffff');newPicker.close();
   $('newW').value=settings.newW;$('newH').value=settings.newH;   // the default size from Settings
   newDlg.showModal();
+  // Don't let the browser focus the first text field: on phones that opens the on-screen keyboard.
+  $('newTitle').focus({preventScroll:true});
 }
 function createEmptyImage(){
   const w=parseInt($('newW').value,10),h=parseInt($('newH').value,10);
@@ -583,6 +624,9 @@ if('serviceWorker' in navigator){
 }
 
 new ResizeObserver(()=>{resize()}).observe(stage);
-addEventListener('resize',()=>{resize();});
+addEventListener('resize',()=>{resize();layoutWidth()});
+new ResizeObserver(()=>requestAnimationFrame(layoutWidth)).observe(document.querySelector('header'));
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layoutWidth);
+layoutWidth();
 resize();ui();restore();
 });

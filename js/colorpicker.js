@@ -130,11 +130,15 @@ function createColorPicker({mount,input,onChange,inline=false,palette=null,fixed
       const b=btn.getBoundingClientRect(),w=pop.offsetWidth,ph=pop.offsetHeight,m=6;
       let top=b.bottom+6;
       if(top+ph>innerHeight-m){const up=b.top-6-ph;top=up>=m?up:Math.max(m,innerHeight-ph-m)}
-      pop.style.left=clamp(b.left,m,Math.max(m,innerWidth-w-m))+'px';pop.style.top=top+'px';
-    }else{
+      const vw=document.documentElement.clientWidth;   // innerWidth can grow on mobile when a popup overflows
+      pop.style.left=clamp(b.left,m,Math.max(m,vw-w-m))+'px';pop.style.top=top+'px';
+    }else{                                // relative to the button; never past either screen edge
       pop.style.left='0';
-      const over=pop.getBoundingClientRect().right-(innerWidth-6);
-      if(over>0)pop.style.left=(-over)+'px';
+      const vw=document.documentElement.clientWidth,r=pop.getBoundingClientRect(),m=6;
+      let shift=0;
+      if(r.right>vw-m)shift=(vw-m)-r.right;
+      if(r.left+shift<m)shift=m-r.left;
+      pop.style.left=shift+'px';
     }
   }
   function open(){pop.hidden=false;place();btn.setAttribute('aria-expanded','true')}
