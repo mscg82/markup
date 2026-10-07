@@ -3,9 +3,10 @@ const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
 let bg=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
-const ptrs=new Map();let pinch=null,last=null,fillTap=null;
+const ptrs=new Map();let pinch=null,last=null,fillTap=null,tapTrack=null;
+let pending=null;   // rectangle/circle/star that has been drawn but not placed yet (see "pending shape" below)
 const MAXDIM=2400;
-const APP_VERSION='v15';   // keep in step with CACHE in sw.js
+const APP_VERSION='v16';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -112,8 +113,10 @@ function render(){
   ctx.imageSmoothingQuality='high';
   ctx.drawImage(bg,0,0);ctx.drawImage(L,0,0);
   if(cur&&!(cur.t==='pen'||cur.t==='erase'))drawOp(ctx,cur);
+  if(pending)drawOp(ctx,pending);
   ctx.setTransform(d*s,0,0,d*s,d*ox,d*oy);
   ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=1/s;ctx.strokeRect(0,0,bg.width,bg.height);
+  positionMove();
 }
 function fit(){
   if(!bg)return;const r=stage.getBoundingClientRect();
@@ -131,10 +134,11 @@ const local=e=>{const r=cv.getBoundingClientRect();return[e.clientX-r.left,e.cli
 cv.addEventListener('pointerdown',e=>{
   if(!bg)return;cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId,local(e));
-  if(ptrs.size===2){fillTap=null;cancelCur();startPinch();return}
+  if(ptrs.size===2){fillTap=null;tapTrack=null;cancelCur();startPinch();return}
   if(ptrs.size>2)return;
   if(tool==='pan'||spaceDown||e.button===1||e.button===2){panning=true;last=local(e);setCursor();return}
   if(tool==='fill'){fillTap={id:e.pointerId,p:toImg(e),sx:e.clientX,sy:e.clientY,c:$('color').value};return}   // applied on release
+  if(pending){tapTrack={id:e.pointerId,sx:e.clientX,sy:e.clientY,p0:toImg(e)};return}   // a tap places the pending shape; a drag places it and starts a new one
   const p=toImg(e),w=tool==='erase'?widths.erase:widths.draw,c=$('color').value;
   if(tool==='pen'||tool==='erase'){cur={t:tool,c,w,p:[p]};drawOp(lc,cur);}
   else cur={t:tool,c,w,a:p,b:p};
@@ -146,6 +150,13 @@ cv.addEventListener('pointermove',e=>{
   if(ptrs.size===2&&pinch){updatePinch();return}
   if(panning){const q=local(e);ox+=q[0]-last[0];oy+=q[1]-last[1];last=q;render();return}
   if(fillTap&&fillTap.id===e.pointerId&&Math.hypot(e.clientX-fillTap.sx,e.clientY-fillTap.sy)>10)fillTap=null;   // it was a drag, not a tap
+  if(tapTrack&&tapTrack.id===e.pointerId){
+    if(Math.hypot(e.clientX-tapTrack.sx,e.clientY-tapTrack.sy)>10){
+      const t0=tapTrack;tapTrack=null;commitPending();
+      cur={t:tool,c:$('color').value,w:widths.draw,a:t0.p0,b:toImg(e)};render();
+    }
+    return;
+  }
   if(!cur)return;
   const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];
   for(const ev of (evs.length?evs:[e])){
@@ -161,17 +172,63 @@ function end(e){
   if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
   if(ptrs.size<2)pinch=null;
   if(fillTap&&fillTap.id===e.pointerId){const f=fillTap;fillTap=null;if(e.type==='pointerup')commitFill(f)}
+  if(tapTrack&&tapTrack.id===e.pointerId){tapTrack=null;if(e.type==='pointerup')commitPending()}
   if(cur&&e.type==='pointerup'){
     const o=cur;cur=null;
     const degenerate=!o.p&&o.a[0]===o.b[0]&&o.a[1]===o.b[1];
-    if(!degenerate){ops.push(o);redoStack=[];if(o.t==='pen'||o.t==='erase'){}else drawOp(lc,o);persist()}
-    else replay();
+    if(degenerate)replay();
+    else if(MOVABLE.has(o.t))setPending(o);   // rectangle/circle/star: wait for the user to place it
+    else{ops.push(o);redoStack=[];if(o.t==='pen'||o.t==='erase'){}else drawOp(lc,o);persist()}
     ui();render();
   }else if(cur)cancelCur();
   if(ptrs.size===0){panning=false;setCursor()}
 }
 cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
 function cancelCur(){if(cur){cur=null;replay();render()}}
+
+/* ---------- pending shape ---------- */
+// After the drag, a rectangle, circle or star is not committed right away. It stays "pending":
+// it is previewed on the canvas with a Move button next to it. Dragging that button moves the
+// shape (its size does not change). The shape is committed to the image and to the history,
+// as a single operation, as soon as the user does anything else.
+const MOVABLE=new Set(['rect','circle','star']);
+const mvBtn=$('moveBtn');
+function setPending(o){pending=o;ui();render()}
+function commitPending(){
+  if(!pending)return;
+  const o=pending;pending=null;
+  drawOp(lc,o);ops.push(o);redoStack=[];persist();ui();render();
+}
+function discardPending(){if(pending){pending=null;tapTrack=null;ui();render()}}
+function shapeBox(o){                    // bounding box in image coordinates, stroke included
+  const pad=o.w/2;
+  if(o.t==='rect')return[Math.min(o.a[0],o.b[0])-pad,Math.min(o.a[1],o.b[1])-pad,Math.max(o.a[0],o.b[0])+pad,Math.max(o.a[1],o.b[1])+pad];
+  const r=Math.hypot(o.b[0]-o.a[0],o.b[1]-o.a[1])+pad;   // circle and star: the circle through b
+  return[o.a[0]-r,o.a[1]-r,o.a[0]+r,o.a[1]+r];
+}
+function positionMove(){
+  if(!pending){mvBtn.hidden=true;return}
+  const [x0,y0,x1,y1]=shapeBox(pending),W=stage.clientWidth,H=stage.clientHeight,B=36,gap=8;
+  let top=y1*s+oy+gap;                                   // below the shape...
+  if(top+B>H-4)top=y0*s+oy-gap-B;                        // ...or above it when there is no room
+  const left=Math.min(Math.max((x0+x1)/2*s+ox-B/2,4),W-B-4);
+  top=Math.min(Math.max(top,4),H-B-4);
+  mvBtn.style.left=left+'px';mvBtn.style.top=top+'px';mvBtn.hidden=false;
+}
+let mvDrag=null;
+mvBtn.addEventListener('pointerdown',e=>{
+  if(!pending)return;e.preventDefault();mvBtn.setPointerCapture(e.pointerId);
+  mvDrag={id:e.pointerId,x:e.clientX,y:e.clientY,a:[...pending.a],b:[...pending.b]};
+});
+mvBtn.addEventListener('pointermove',e=>{
+  if(!mvDrag||mvDrag.id!==e.pointerId||!pending)return;
+  const dx=(e.clientX-mvDrag.x)/s,dy=(e.clientY-mvDrag.y)/s;   // screen movement -> image units
+  pending.a=[mvDrag.a[0]+dx,mvDrag.a[1]+dy];pending.b=[mvDrag.b[0]+dx,mvDrag.b[1]+dy];
+  render();
+});
+const mvEnd=e=>{if(mvDrag&&mvDrag.id===e.pointerId)mvDrag=null};
+mvBtn.addEventListener('pointerup',mvEnd);mvBtn.addEventListener('pointercancel',mvEnd);
+addEventListener('pagehide',commitPending);
 // Two-finger gesture: starts as pan only; once the fingers spread/close by more than
 // PINCH_THRESHOLD px it locks into zoom only, until a finger is lifted.
 const PINCH_THRESHOLD=28;
@@ -203,10 +260,11 @@ cv.addEventListener('wheel',e=>{
 
 /* ---------- UI ---------- */
 function ui(){
-  $('undo').disabled=!ops.length;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miExport').disabled=!bg;$('clear').disabled=!bg;
+  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miExport').disabled=!bg;$('clear').disabled=!bg;
   $('hint').style.display=bg?'none':'flex';
 }
 document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
+  commitPending();
   tool=b.dataset.t;
   document.querySelectorAll('button[data-t]').forEach(x=>x.setAttribute('aria-pressed',x===b));
   const isShape=!!b.closest('#shapesList');
@@ -243,9 +301,9 @@ const picker=createColorPicker({mount:$('cp'),input:$('color'),palette:PALETTE,o
 markSw();
 $('width').oninput=e=>{const v=(+e.target.value);widths[tool==='erase'?'erase':'draw']=v;$('wv').textContent=v;savePrefs()};
 function clearWork(all){
-  if(!all&&!ops.length){msg(t('msg.nothingToClear'));return}
+  if(!all&&!ops.length&&!pending){msg(t('msg.nothingToClear'));return}
   if(!confirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
-  cur=null;ops=[];redoStack=[];resetNames();
+  cur=null;ops=[];redoStack=[];discardPending();resetNames();
   if(all){
     bg=L=lc=null;
     try{localStorage.removeItem('markup.bg');localStorage.removeItem('markup.ops')}catch(e){}
@@ -267,8 +325,8 @@ function clearWork(all){
   b.addEventListener('contextmenu',e=>e.preventDefault());
   b.addEventListener('click',e=>{if(e.detail===0&&!b.disabled)clearWork(false)}); // keyboard
 })();
-$('undo').onclick=()=>{if(!ops.length)return;redoStack.push(ops.pop());replay();persist();ui();render()};
-$('redo').onclick=()=>{if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);drawOp(lc,o);persist();ui();render()};
+$('undo').onclick=()=>{commitPending();if(!ops.length)return;redoStack.push(ops.pop());replay();persist();ui();render()};
+$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);drawOp(lc,o);persist();ui();render()};
 $('zi').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(1.25,r.width/2,r.height/2)};
 $('zo').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(.8,r.width/2,r.height/2)};
 $('fit').onclick=fit;
@@ -297,9 +355,9 @@ function setBackground(img){
 }
 $('file').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
-  if(ops.length&&!confirm(t('confirm.openImage')))return;
+  if((ops.length||pending)&&!confirm(t('confirm.openImage')))return;
   const url=URL.createObjectURL(f),img=new Image();
-  img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];resetNames();persist(true);ui();fit()};
+  img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];discardPending();resetNames();persist(true);ui();fit()};
   img.onerror=()=>msg(t('msg.badImage'));
   img.src=url;
 };
@@ -364,7 +422,7 @@ function importStatus(file){
     if(bg&&!confirm(t('confirm.import')))return;
     const img=new Image();
     img.onload=()=>{
-      setBackground(img);cur=null;ops=st.operations;redoStack=[];resetNames();replay();
+      setBackground(img);cur=null;ops=st.operations;redoStack=[];discardPending();resetNames();replay();
       const p=st.preferences||{};
       if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
       if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
@@ -406,8 +464,8 @@ function importStatus(file){
   miNew.onclick=()=>toggleSub(sub.hidden);
   $('miOpen').onclick=()=>{close();$('file').click()};
   $('miEmpty').onclick=()=>{close();openNewDialog()};
-  $('miJpeg').onclick=()=>{close();askFileName('jpeg')};
-  $('miExport').onclick=()=>{close();askFileName('status')};
+  $('miJpeg').onclick=()=>{close();commitPending();askFileName('jpeg')};
+  $('miExport').onclick=()=>{close();commitPending();askFileName('status')};
   $('miImport').onclick=()=>{close();$('importFile').click()};
   $('miSettings').onclick=()=>{close();openSettings()};
   $('importFile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importStatus(f)};
@@ -481,10 +539,10 @@ function createEmptyImage(){
   if(!(w>=16&&w<=MAXDIM&&h>=16&&h<=MAXDIM)){
     const e=$('newErr');e.textContent=t('newdlg.error',{min:16,max:MAXDIM});e.hidden=false;return;
   }
-  if(ops.length&&!confirm(t('confirm.newImage')))return;
+  if((ops.length||pending)&&!confirm(t('confirm.newImage')))return;
   const c=document.createElement('canvas');c.width=w;c.height=h;
   const x=c.getContext('2d');x.fillStyle=$('newColor').value;x.fillRect(0,0,w,h);
-  setBackground(c);cur=null;ops=[];redoStack=[];resetNames();persist(true);ui();fit();newDlg.close();
+  setBackground(c);cur=null;ops=[];redoStack=[];discardPending();resetNames();persist(true);ui();fit();newDlg.close();
 }
 $('newOk').onclick=createEmptyImage;
 $('newCancel').onclick=()=>newDlg.close();

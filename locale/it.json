@@ -91,5 +91,7 @@
   "settings.newSize": "Dimensioni predefinite di una nuova immagine",
   "settings.save": "Salva",
   "tool.star.label": "Stella",
-  "tool.star.title": "Stella – trascina dal centro verso l'esterno"
+  "tool.star.title": "Stella – trascina dal centro verso l'esterno",
+  "tool.moveShape.label": "Sposta forma",
+  "tool.moveShape.title": "Sposta la forma – trascinala, poi tocca altrove per posizionarla"
 }

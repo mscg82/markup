@@ -91,5 +91,7 @@
   "settings.newSize": "Default size of a new image",
   "settings.save": "Save",
   "tool.star.label": "Star",
-  "tool.star.title": "Star – drag from the center outward"
+  "tool.star.title": "Star – drag from the center outward",
+  "tool.moveShape.label": "Move shape",
+  "tool.moveShape.title": "Move the shape – drag it, then click elsewhere to place it"
 }
