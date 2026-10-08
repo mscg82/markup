@@ -17,7 +17,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v16';   // keep in step with CACHE in sw.js
+const APP_VERSION='v17';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -47,8 +47,14 @@ function drawOp(c,o){
   if(o.t==='erase')c.globalCompositeOperation='destination-out';
   c.beginPath();
   if(o.t==='pen'||o.t==='erase'){
-    c.moveTo(o.p[0][0],o.p[0][1]);
-    if(o.p.length===1)c.lineTo(o.p[0][0],o.p[0][1]);
+    const q=o.p[0];
+    if(o.p.every(r=>r[0]===q[0]&&r[1]===q[1])){
+      // A single touch point: fill a circle of the pen width. A zero-length stroke with round caps is
+      // not drawn reliably by every browser/GPU, a filled circle is.
+      c.fillStyle=c.strokeStyle;c.arc(q[0],q[1],o.w/2,0,Math.PI*2);c.fill();
+      c.restore();return;
+    }
+    c.moveTo(q[0],q[1]);
     for(let i=1;i<o.p.length;i++)c.lineTo(o.p[i][0],o.p[i][1]);
   }else if(o.t==='line'){c.moveTo(...o.a);c.lineTo(...o.b)}
   else if(o.t==='rect'){c.rect(o.a[0],o.a[1],o.b[0]-o.a[0],o.b[1]-o.a[1])}
