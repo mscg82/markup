@@ -1,7 +1,7 @@
 i18n.ready.then(()=>{          // wait until the locale strings are loaded
 const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
-let bg=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,cur=null,panning=false;
+let bg=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,viewW=0,viewH=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
 const ptrs=new Map();let pinch=null,last=null,fillTap=null,tapTrack=null;
 let pending=null;   // rectangle/circle/star that has been drawn but not placed yet (see "pending shape" below)
@@ -120,6 +120,13 @@ function replay(){lc.clearRect(0,0,L.width,L.height);ops.forEach(o=>drawOp(lc,o)
 /* ---------- view ---------- */
 function resize(){
   const r=stage.getBoundingClientRect(),d=devicePixelRatio||1;
+  // When the view changes shape (device rotation, toolbar wrapping...) keep the same part of the image
+  // in the center of the view: same zoom, and the image point that was at the old center stays at the new one.
+  if(bg&&viewW&&viewH&&(r.width!==viewW||r.height!==viewH)){
+    const ix=(viewW/2-ox)/s,iy=(viewH/2-oy)/s;
+    ox=r.width/2-ix*s;oy=r.height/2-iy*s;
+  }
+  viewW=r.width;viewH=r.height;
   cv.width=Math.round(r.width*d);cv.height=Math.round(r.height*d);render();
 }
 function render(){
