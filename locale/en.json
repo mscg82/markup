@@ -93,5 +93,10 @@
   "tool.star.label": "Star",
   "tool.star.title": "Star – drag from the center outward",
   "tool.moveShape.label": "Move shape",
-  "tool.moveShape.title": "Move the shape – drag it, then click elsewhere to place it"
+  "tool.moveShape.title": "Move the shape – drag it, then click elsewhere to place it",
+  "toolbar.label": "Toolbar position",
+  "toolbar.top.title": "Toolbar on top – click to move it to the left, hold for automatic mode",
+  "toolbar.left.title": "Toolbar on the left – click to move it to the top, hold for automatic mode",
+  "toolbar.auto.title": "Toolbar position: automatic (left in landscape, top in portrait) – click to fix it on the other side",
+  "msg.toolbarAuto": "Toolbar position: automatic."
 }

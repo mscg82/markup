@@ -9,6 +9,15 @@ const MAXDIM=2400;
 // Place a popup (absolutely positioned inside a position:relative wrapper) so that it never goes past the
 // screen edges. On mobile browsers window.innerWidth GROWS when a popup overflows to the right, so the
 // stable documentElement.clientWidth is used instead.
+// Popups of the toolbar: below the button when the toolbar is on top, to the right of it (in viewport
+// coordinates) when the toolbar is on the left.
+function placePopup(el,btn){
+  if(!document.documentElement.classList.contains('tb-left')){el.style.top='';keepOnScreen(el);return}
+  const b=btn.getBoundingClientRect(),w=el.offsetWidth,h=el.offsetHeight,m=6;
+  const vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight;
+  el.style.left=Math.max(m,Math.min(b.right+6,vw-w-m))+'px';
+  el.style.top=Math.max(m,Math.min(b.top,vh-h-m))+'px';
+}
 function keepOnScreen(el){
   el.style.left='0';
   const vw=document.documentElement.clientWidth,r=el.getBoundingClientRect(),m=6;
@@ -469,9 +478,10 @@ function importStatus(file){
   const items=()=>[...list.querySelectorAll('button:not(:disabled)')].filter(b=>b.offsetParent!==null);
   function toggleSub(show){
     sub.hidden=!show;miNew.setAttribute('aria-expanded',String(show));
+    if(!list.hidden)placePopup(list,btn);     // the menu got taller or shorter
   }
   function open(){
-    toggleSub(false);list.hidden=false;keepOnScreen(list);
+    toggleSub(false);list.hidden=false;placePopup(list,btn);
     btn.setAttribute('aria-expanded','true');
   }
   function close(focusBtn){list.hidden=true;btn.setAttribute('aria-expanded','false');if(focusBtn)btn.focus()}
@@ -502,7 +512,7 @@ function importStatus(file){
   const btn=$('shapesBtn'),list=$('shapesList');
   const items=()=>[...list.querySelectorAll('button')];
   function open(){
-    list.hidden=false;keepOnScreen(list);
+    list.hidden=false;placePopup(list,btn);
     btn.setAttribute('aria-expanded','true');
   }
   function close(focusBtn){list.hidden=true;btn.setAttribute('aria-expanded','false');if(focusBtn)btn.focus()}
@@ -560,7 +570,7 @@ function closeWidthPop(focusBtn){
   widthPop.hidden=true;widthBtn.setAttribute('aria-expanded','false');if(focusBtn)widthBtn.focus();
 }
 function openWidthPop(){
-  widthPop.hidden=false;keepOnScreen(widthPop);
+  widthPop.hidden=false;placePopup(widthPop,widthBtn);
   widthBtn.setAttribute('aria-expanded','true');
 }
 widthBtn.onclick=()=>{if(widthPop.hidden){openWidthPop();$('widthL').focus()}else closeWidthPop()};
@@ -572,11 +582,58 @@ widthPop.addEventListener('keydown',e=>{
 function layoutWidth(){
   const hdr=document.querySelector('header');
   hdr.classList.remove('wpop');
-  const collapse=$('width').getBoundingClientRect().width<MIN_INLINE_WIDTH;
+  const collapse=document.documentElement.classList.contains('tb-left')   // the left toolbar is too narrow for a slider
+    ||$('width').getBoundingClientRect().width<MIN_INLINE_WIDTH;
   hdr.classList.toggle('wpop',collapse);
   if(!collapse)closeWidthPop();
   else if(!widthPop.hidden)openWidthPop();   // keep an open popup inside the screen
 }
+
+/* ---------- toolbar position (top / left / automatic) ---------- */
+// Mode 'top' or 'left' fixes the toolbar there; 'auto' puts it on the left in landscape and on top in
+// portrait. Click toggles top <-> left, a long press switches to 'auto'. Stored in localStorage.
+const TB_KEY='markup.toolbar';
+let tbMode='top';
+try{const m=localStorage.getItem(TB_KEY);if(m==='top'||m==='left'||m==='auto')tbMode=m}catch(e){}
+const landscapeMQ=matchMedia('(orientation: landscape)');
+const tbEffective=()=>tbMode==='auto'?(landscapeMQ.matches?'left':'top'):tbMode;
+const layoutBtn=$('layoutBtn');
+const TB_ICONS={
+  // toolbar is on top: a vertical bar and an arrow pointing left (click moves it to the left)
+  top:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1"/><path d="M21 12h-9M15.5 8.5L12 12l3.5 3.5"/></svg>',
+  // toolbar is on the left: a horizontal bar and an arrow pointing up (click moves it to the top)
+  left:'<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="5" rx="1"/><path d="M12 21v-9M8.5 15.5L12 12l3.5 3.5"/></svg>',
+  // automatic: a phone surrounded by rotation arrows
+  auto:'<svg viewBox="0 0 24 24"><rect x="9.5" y="8" width="5" height="8" rx="1"/><path d="M19.5 10A8 8 0 0 0 6 6.5M6 3v3.5h3.5M4.5 14A8 8 0 0 0 18 17.5M18 21v-3.5h-3.5"/></svg>'
+};
+function closePopups(){document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))}   // every popup closes on an outside press
+function applyToolbar(){
+  const eff=tbEffective(),key=tbMode==='auto'?'auto':eff;
+  document.documentElement.classList.toggle('tb-left',eff==='left');
+  layoutBtn.innerHTML=TB_ICONS[key];
+  layoutBtn.title=t('toolbar.'+key+'.title');
+  layoutBtn.setAttribute('aria-label',layoutBtn.title);
+  layoutWidth();
+}
+function setToolbarMode(m){
+  tbMode=m;try{localStorage.setItem(TB_KEY,m)}catch(e){}
+  closePopups();applyToolbar();
+}
+landscapeMQ.addEventListener('change',()=>{if(tbMode==='auto'){closePopups();applyToolbar()}});
+(()=>{
+  let timer=0;
+  const stop=()=>{clearTimeout(timer);timer=0;layoutBtn.classList.remove('holding')};
+  layoutBtn.addEventListener('pointerdown',e=>{
+    if(e.button>0)return;
+    layoutBtn.classList.add('holding');
+    timer=setTimeout(()=>{timer=0;layoutBtn.classList.remove('holding');setToolbarMode('auto');msg(t('msg.toolbarAuto'))},600);
+  });
+  layoutBtn.addEventListener('pointerup',()=>{if(timer){stop();setToolbarMode(tbEffective()==='top'?'left':'top')}else stop()});
+  layoutBtn.addEventListener('pointerleave',stop);
+  layoutBtn.addEventListener('pointercancel',stop);
+  layoutBtn.addEventListener('contextmenu',e=>e.preventDefault());
+  layoutBtn.addEventListener('click',e=>{if(e.detail===0)setToolbarMode(tbEffective()==='top'?'left':'top')});   // keyboard
+})();
 
 /* ---------- new empty image ---------- */
 const newDlg=$('newDlg');
@@ -640,6 +697,6 @@ new ResizeObserver(()=>{resize()}).observe(stage);
 addEventListener('resize',()=>{resize();layoutWidth()});
 new ResizeObserver(()=>requestAnimationFrame(layoutWidth)).observe(document.querySelector('header'));
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layoutWidth);
-layoutWidth();
+applyToolbar();
 resize();ui();restore();
 });

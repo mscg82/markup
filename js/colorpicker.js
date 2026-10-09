@@ -126,14 +126,21 @@ function createColorPicker({mount,input,onChange,inline=false,palette=null,fixed
     else if(e.key==='Enter'&&e.target!==hexIn)close(true);
   });
   function place(){
-    if(fixed){                           // viewport coordinates, kept fully on screen
+    const sideBar=!fixed&&document.documentElement.classList.contains('tb-left');   // toolbar attached to the left
+    pop.classList.toggle('fixed',fixed||sideBar);
+    if(sideBar){                          // to the right of the button, kept fully on screen vertically
+      const b=btn.getBoundingClientRect(),w=pop.offsetWidth,ph=pop.offsetHeight,m=6;
+      const vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight;
+      pop.style.left=clamp(b.right+6,m,Math.max(m,vw-w-m))+'px';
+      pop.style.top=clamp(b.top,m,Math.max(m,vh-ph-m))+'px';
+    }else if(fixed){                     // viewport coordinates, kept fully on screen
       const b=btn.getBoundingClientRect(),w=pop.offsetWidth,ph=pop.offsetHeight,m=6;
       let top=b.bottom+6;
       if(top+ph>innerHeight-m){const up=b.top-6-ph;top=up>=m?up:Math.max(m,innerHeight-ph-m)}
       const vw=document.documentElement.clientWidth;   // innerWidth can grow on mobile when a popup overflows
       pop.style.left=clamp(b.left,m,Math.max(m,vw-w-m))+'px';pop.style.top=top+'px';
     }else{                                // relative to the button; never past either screen edge
-      pop.style.left='0';
+      pop.style.top='';pop.style.left='0';
       const vw=document.documentElement.clientWidth,r=pop.getBoundingClientRect(),m=6;
       let shift=0;
       if(r.right>vw-m)shift=(vw-m)-r.right;
