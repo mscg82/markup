@@ -26,7 +26,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v17';   // keep in step with CACHE in sw.js
+const APP_VERSION='v18';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -226,7 +226,10 @@ function cancelCur(){if(cur){cur=null;replay();render()}}
 // as a single operation, as soon as the user does anything else.
 const MOVABLE=new Set(['rect','circle','star']);
 const mvBtn=$('moveBtn');
-function setPending(o){pending=o;ui();render()}
+function setPending(o){
+  if(o.t==='rect'){const x0=Math.min(o.a[0],o.b[0]),x1=Math.max(o.a[0],o.b[0]),y0=Math.min(o.a[1],o.b[1]),y1=Math.max(o.a[1],o.b[1]);o.a=[x0,y0];o.b=[x1,y1]}   // a = top-left, b = bottom-right
+  pending=o;setHandles();ui();render();
+}
 function commitPending(){
   if(!pending)return;
   const o=pending;pending=null;
@@ -239,14 +242,34 @@ function shapeBox(o){                    // bounding box in image coordinates, s
   const r=Math.hypot(o.b[0]-o.a[0],o.b[1]-o.a[1])+pad;   // circle and star: the circle through b
   return[o.a[0]-r,o.a[1]-r,o.a[0]+r,o.a[1]+r];
 }
+const hA=$('hA'),hB=$('hB'),HB=32;
+const ICON_CORNER='<svg viewBox="0 0 24 24"><path d="M5 5l14 14M5 5h6M5 5v6M19 19h-6M19 19v-6"/></svg>';
+const ICON_RADIUS='<svg viewBox="0 0 24 24"><path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/></svg>';
+function setHandles(){   // icons and tooltips depend on the kind of the pending shape
+  if(!pending)return;
+  const rect=pending.t==='rect';
+  hA.innerHTML=rect?ICON_CORNER:ICON_RADIUS;hA.classList.toggle('rad',!rect);
+  hA.title=t(rect?'tool.resizeCorner.title':'tool.resizeRadius.title');
+  hA.setAttribute('aria-label',t(rect?'tool.resizeCorner.label':'tool.resizeRadius.label'));
+  hB.innerHTML=ICON_CORNER;hB.title=t('tool.resizeCorner.title');hB.setAttribute('aria-label',t('tool.resizeCorner.label'));
+}
 function positionMove(){
-  if(!pending){mvBtn.hidden=true;return}
+  if(!pending){mvBtn.hidden=true;hA.hidden=true;hB.hidden=true;return}
   const [x0,y0,x1,y1]=shapeBox(pending),W=stage.clientWidth,H=stage.clientHeight,B=36,gap=8;
-  let top=y1*s+oy+gap;                                   // below the shape...
-  if(top+B>H-4)top=y0*s+oy-gap-B;                        // ...or above it when there is no room
+  let top=y1*s+oy+gap,below=true;                        // below the shape...
+  if(top+B>H-4){top=y0*s+oy-gap-B;below=false}           // ...or above it when there is no room
   const left=Math.min(Math.max((x0+x1)/2*s+ox-B/2,4),W-B-4);
   top=Math.min(Math.max(top,4),H-B-4);
   mvBtn.style.left=left+'px';mvBtn.style.top=top+'px';mvBtn.hidden=false;
+  const put=(h,cx,cy)=>{h.style.left=Math.min(Math.max(cx-HB/2,4),W-HB-4)+'px';h.style.top=Math.min(Math.max(cy-HB/2,4),H-HB-4)+'px';h.hidden=false};
+  if(pending.t==='rect'){   // handles just outside the top-left and bottom-right corners
+    const o=HB*0.45;
+    put(hA,pending.a[0]*s+ox-o,pending.a[1]*s+oy-o);put(hB,pending.b[0]*s+ox+o,pending.b[1]*s+oy+o);
+  }else{                    // one radius handle on the side opposite to the Move button
+    hB.hidden=true;
+    const cx=(x0+x1)/2*s+ox;
+    put(hA,cx,below?y0*s+oy-gap-HB/2:y1*s+oy+gap+HB/2);
+  }
 }
 let mvDrag=null;
 mvBtn.addEventListener('pointerdown',e=>{
@@ -261,6 +284,32 @@ mvBtn.addEventListener('pointermove',e=>{
 });
 const mvEnd=e=>{if(mvDrag&&mvDrag.id===e.pointerId)mvDrag=null};
 mvBtn.addEventListener('pointerup',mvEnd);mvBtn.addEventListener('pointercancel',mvEnd);
+// Resize handles: delta based, so the shape follows the finger without jumping. Rectangle: the handles
+// move the top-left (a) and bottom-right (b) corners. Circle/star: the handle at the top of the shape
+// sets the radius. Like moving, resizing is part of the preview and not a history entry.
+let hDrag=null;
+for(const [h,which] of [[hA,'a'],[hB,'b']]){
+  h.addEventListener('pointerdown',e=>{
+    if(!pending)return;e.preventDefault();h.setPointerCapture(e.pointerId);
+    hDrag={id:e.pointerId,which,x:e.clientX,y:e.clientY,a:[...pending.a],b:[...pending.b]};
+  });
+  h.addEventListener('pointermove',e=>{
+    if(!hDrag||hDrag.id!==e.pointerId||!pending)return;
+    const dx=(e.clientX-hDrag.x)/s,dy=(e.clientY-hDrag.y)/s,d=hDrag;
+    if(pending.t==='rect'){pending[d.which]=[d[d.which][0]+dx,d[d.which][1]+dy]}
+    else{
+      const r0=Math.hypot(d.b[0]-d.a[0],d.b[1]-d.a[1]);
+      const r=Math.max(1,Math.hypot(dx,dy-r0));   // the handle starts r0 above the center; r = its new distance from it
+      pending.a=[...d.a];pending.b=[d.a[0],d.a[1]-r];
+    }
+    render();
+  });
+  const hEnd=e=>{
+    if(!hDrag||hDrag.id!==e.pointerId)return;hDrag=null;
+    if(pending&&pending.t==='rect'){setPending(pending)}   // normalize the corners again
+  };
+  h.addEventListener('pointerup',hEnd);h.addEventListener('pointercancel',hEnd);
+}
 addEventListener('pagehide',commitPending);
 // Two-finger gesture: starts as pan only; once the fingers spread/close by more than
 // PINCH_THRESHOLD px it locks into zoom only, until a finger is lifted.
@@ -313,7 +362,7 @@ function syncWidth(){
   $('width').value=v;$('widthL').value=v;                       // inline slider and popup slider
   $('wv').textContent=v;$('wvPop').textContent=v;$('wvBtn').textContent=v;
 }
-function setWidth(v){widths[tool==='erase'?'erase':'draw']=v;syncWidth();savePrefs()}
+function setWidth(v){widths[tool==='erase'?'erase':'draw']=v;if(pending&&tool!=='erase'){pending.w=v;render()}syncWidth();savePrefs()}
 const PK='markup.prefs';
 function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,draw:widths.draw,erase:widths.erase}))}catch(e){}}
 try{
@@ -330,10 +379,10 @@ const PALETTE=['#e63946','#f77f00','#fcbf49','#2a9d8f','#06d6a0','#118ab2','#7b2
 const sw=$('sw');
 PALETTE.forEach(c=>{
   const b=document.createElement('button');b.style.background=c;b.dataset.c=c;b.title=c;b.setAttribute('aria-label',t('color.swatch',{color:c}));
-  b.onclick=()=>{$('color').value=c;markSw();savePrefs()};sw.appendChild(b);
+  b.onclick=()=>{$('color').value=c;if(pending){pending.c=c;render()}markSw();savePrefs()};sw.appendChild(b);
 });
 function markSw(){const v=$('color').value.toLowerCase();picker.set(v);sw.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===v))}
-const picker=createColorPicker({mount:$('cp'),input:$('color'),palette:PALETTE,onChange:(c,final)=>{markSw();if(final)savePrefs()}});
+const picker=createColorPicker({mount:$('cp'),input:$('color'),palette:PALETTE,onChange:(c,final)=>{markSw();if(pending){pending.c=c;render()}if(final)savePrefs()}});
 markSw();
 $('width').oninput=e=>setWidth((+e.target.value));
 $('widthL').oninput=e=>setWidth((+e.target.value));

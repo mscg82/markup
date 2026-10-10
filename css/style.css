@@ -114,6 +114,10 @@ html:not(.i18n-ready) body{visibility:hidden}
 
 /* floating "move" button shown next to a shape that has not been placed yet */
 .mv{position:absolute;z-index:6;width:36px;height:36px;padding:0;justify-content:center;border-radius:50%;background:var(--acc);color:#1b1b1b;border-color:var(--acc);touch-action:none;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+.hd{width:32px;height:32px;min-height:0;background:#f4f4f4;border-color:var(--acc);color:#1b1b1b;cursor:nwse-resize}
+.hd:hover{background:#fff}
+.hd.rad{cursor:ns-resize}
+.hd[hidden]{display:none}
 .mv:hover{background:#f5c352}
 .mv:active{cursor:grabbing}
 .mv[hidden]{display:none}
