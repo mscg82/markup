@@ -247,6 +247,7 @@ const ICON_CORNER='<svg viewBox="0 0 24 24"><path d="M5 5l14 14M5 5h6M5 5v6M19 1
 const ICON_RADIUS='<svg viewBox="0 0 24 24"><path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/></svg>';
 function setHandles(){   // icons and tooltips depend on the kind of the pending shape
   if(!pending)return;
+  for(const h of [hA,hB]){h.style.width=h.style.height=HB+'px';h.style.minHeight='0'}   // round even if an older cached stylesheet still has the 36px minimum for buttons
   const rect=pending.t==='rect';
   hA.innerHTML=rect?ICON_CORNER:ICON_RADIUS;hA.classList.toggle('rad',!rect);
   hA.title=t(rect?'tool.resizeCorner.title':'tool.resizeRadius.title');
@@ -553,6 +554,18 @@ function importStatus(file){
   $('miExport').onclick=()=>{close();commitPending();askFileName('status')};
   $('miImport').onclick=()=>{close();$('importFile').click()};
   $('miSettings').onclick=()=>{close();openSettings()};
+  // Force-reload: drop the service worker and its cached files, then reload so everything is fetched
+  // again from the server. The drawing and settings live in localStorage and are not touched.
+  $('miReload').onclick=async()=>{
+    close();
+    if(!navigator.onLine){msg(t('msg.reloadOffline'));return}   // without a connection the cleared cache could not be refilled
+    commitPending();
+    try{
+      if('serviceWorker' in navigator)await Promise.all((await navigator.serviceWorker.getRegistrations()).map(r=>r.unregister()));
+      if(window.caches)await Promise.all((await caches.keys()).map(k=>caches.delete(k)));
+    }catch(e){}
+    location.reload();
+  };
   $('importFile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importStatus(f)};
 })();
 
@@ -739,7 +752,9 @@ $('nameCancel').onclick=()=>nameDlg.close();
 $('nameInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmFileName()}});
 
 if('serviceWorker' in navigator){
-  addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  const reg=()=>navigator.serviceWorker.register('sw.js').catch(()=>{});
+  // this code runs after the locale files are loaded, which can be after the window's load event
+  if(document.readyState==='complete')reg();else addEventListener('load',reg);
 }
 
 new ResizeObserver(()=>{resize()}).observe(stage);
