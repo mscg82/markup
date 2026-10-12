@@ -147,11 +147,19 @@ dialog h2:focus{outline:none}
 
 html.tb-left body{flex-direction:row}
 html.tb-left #stage{min-width:0}
-html.tb-left header{flex:none;overflow-y:auto;overflow-x:hidden;flex-direction:column;flex-wrap:nowrap;align-items:flex-start;justify-content:flex-start;gap:4px;padding:6px;border-bottom:0;border-right:1px solid var(--line)}
-html.tb-left .g{flex:none;flex-direction:column;align-items:flex-start;gap:4px}
-html.tb-left .gw{flex-direction:row}
-html.tb-left .row{display:flex;align-items:center;gap:4px}
+html.tb-left header{flex:none;box-sizing:border-box;width:150px;overflow-y:auto;overflow-x:hidden;flex-direction:column;flex-wrap:nowrap;align-items:stretch;justify-content:flex-start;gap:4px;padding:6px;border-bottom:0;border-right:1px solid var(--line)}
+html.tb-left .g{flex:none;flex-direction:column;align-items:stretch;gap:4px}
+html.tb-left .gw{gap:4px}
+html.tb-left .row{gap:4px}
 html.tb-left .sep{display:block;height:6px;flex:none}
 html.tb-left #sw{display:none}
+/* every row fills the width of the toolbar, its buttons sharing the space equally (the hamburger keeps its size) */
+html.tb-left .row,html.tb-left .gw{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}   /* equal columns */
+html.tb-left .row>*,html.tb-left .gw>*{min-width:0}
+html.tb-left header button svg{flex:none}
+html.tb-left .row>.menu>button,html.tb-left #widthBtn,html.tb-left #cp .cp-btn{width:100%;justify-content:center}
+html.tb-left .row>button{justify-content:center}
+html.tb-left #mainMenu{justify-self:start}
+html.tb-left #mainMenu>button{width:auto}
 /* popups open to the right of the toolbar, in viewport coordinates (js/markup.js: placePopup) */
 html.tb-left #menuList,html.tb-left #shapesList,html.tb-left #widthPop{position:fixed;right:auto;max-height:calc(100vh - 12px);overflow-y:auto}

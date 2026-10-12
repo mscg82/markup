@@ -15,7 +15,7 @@ function placePopup(el,btn){
   if(!document.documentElement.classList.contains('tb-left')){el.style.top='';keepOnScreen(el);return}
   const b=btn.getBoundingClientRect(),w=el.offsetWidth,h=el.offsetHeight,m=6;
   const vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight;
-  el.style.left=Math.max(m,Math.min(b.right+6,vw-w-m))+'px';
+  el.style.left=Math.max(m,Math.min(b.right+6,vw-w-m))+'px';   // right next to the button
   el.style.top=Math.max(m,Math.min(b.top,vh-h-m))+'px';
 }
 function keepOnScreen(el){
