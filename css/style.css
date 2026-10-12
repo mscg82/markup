@@ -53,9 +53,9 @@ canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;displa
 #menuList hr{border:0;border-top:1px solid var(--line);margin:4px 2px;width:auto}
 #menuList .sub{display:flex;flex-direction:column;gap:2px;padding-left:16px}
 #menuList .sub[hidden]{display:none}
-#miNew{display:flex;justify-content:space-between;align-items:center;gap:16px}
+#miNew,#miResize{display:flex;justify-content:space-between;align-items:center;gap:16px}
 .chev{display:inline-block;transition:transform .15s}
-#miNew[aria-expanded=true] .chev{transform:rotate(90deg)}
+#miNew[aria-expanded=true] .chev,#miResize[aria-expanded=true] .chev{transform:rotate(90deg)}
 
 /* new-image dialog */
 dialog{background:var(--bar);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:16px;width:min(92vw,340px);max-height:90vh;overflow:auto}
@@ -93,7 +93,17 @@ html:not(.i18n-ready) body{visibility:hidden}
 .dlg-note{color:var(--mute);font-size:12px;margin:6px 0 14px}
 
 /* color picker inside the new-image dialog: a color bar that opens a popover with the palette on the side */
-#newCp .cp-btn{width:100%}
+#newCp .cp-btn,#frameCp .cp-btn{width:100%}
+/* resize-frame dialog: the four edge inputs around a placeholder for the current image (3x3 table) */
+.frame-grid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,auto);gap:8px;align-items:center;margin-bottom:14px}
+.frame-grid label{display:flex;flex-direction:column;gap:4px;color:var(--mute);font-size:12px;text-align:center}
+.frame-grid input{width:100%;color:var(--ink);font-size:14px;text-align:center}
+.frame-grid .fg-bottom{flex-direction:column-reverse}   /* the input above its label */
+.frame-grid .fg-left,.frame-grid .fg-right{position:relative}   /* the input alone is centered vertically; its label sits just above it */
+.frame-grid .fg-left span,.frame-grid .fg-right span{position:absolute;left:0;right:0;bottom:calc(50% + 22px + 4px)}
+.fg-top{grid-column:2;grid-row:1}.fg-left{grid-column:1;grid-row:2}.fg-right{grid-column:3;grid-row:2}.fg-bottom{grid-column:2;grid-row:3}
+.fg-img{grid-column:2;grid-row:2;align-self:stretch;display:flex;align-items:center;justify-content:center;border:2px dashed var(--line);border-radius:8px;color:var(--mute);min-height:56px}
+.fg-img svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .cp-pop.fixed{position:fixed;top:auto}
 .cp-pop.has-palette{flex-direction:row;align-items:flex-start;gap:12px;width:auto}
 .cp-main{display:flex;flex-direction:column;gap:12px;width:200px}

@@ -27,6 +27,11 @@
           <button role="menuitem" id="miEmpty" data-i18n="menu.emptyImage" data-i18n-title="menu.emptyImage.title"></button>
         </div>
         <hr role="separator">
+        <button role="menuitem" id="miResize" aria-haspopup="menu" aria-expanded="false"><span data-i18n="menu.resize"></span><span class="chev" aria-hidden="true">▸</span></button>
+        <div id="subResize" class="sub" role="menu" hidden>
+          <button role="menuitem" id="miFrame" data-i18n="menu.resizeFrame" data-i18n-title="menu.resizeFrame.title"></button>
+        </div>
+        <hr role="separator">
         <button role="menuitem" id="miJpeg" disabled data-i18n="menu.saveJpeg" data-i18n-title="menu.saveJpeg.title"></button>
         <hr role="separator">
         <button role="menuitem" id="miExport" disabled data-i18n="menu.exportStatus" data-i18n-title="menu.exportStatus.title"></button>
@@ -117,6 +122,23 @@
   <input id="newColor" type="hidden" value="#ffffff">
   <p id="newErr" class="dlg-err" hidden></p>
   <div class="dlg-actions"><button id="newCancel" type="button" data-i18n="common.cancel"></button><button id="newOk" type="button" class="primary" data-i18n="newdlg.create"></button></div>
+</dialog>
+<dialog id="frameDlg" aria-labelledby="frameTitle">
+  <h2 id="frameTitle" tabindex="-1" data-i18n="framedlg.title"></h2>
+  <p class="dlg-note" data-i18n="framedlg.note"></p>
+  <div class="frame-grid">
+    <label class="fg-top"><span data-i18n="framedlg.top"></span><input id="frT" type="number" inputmode="numeric" min="0" max="2400" value="0"></label>
+    <label class="fg-left"><span data-i18n="framedlg.left"></span><input id="frL" type="number" inputmode="numeric" min="0" max="2400" value="0"></label>
+    <div class="fg-img" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M3.5 18l5.5-5.5 4 4 3-3 4.5 4.5"/></svg></div>
+    <label class="fg-right"><span data-i18n="framedlg.right"></span><input id="frR" type="number" inputmode="numeric" min="0" max="2400" value="0"></label>
+    <label class="fg-bottom"><span data-i18n="framedlg.bottom"></span><input id="frB" type="number" inputmode="numeric" min="0" max="2400" value="0"></label>
+  </div>
+  <div class="dlg-label" data-i18n="framedlg.color"></div>
+  <div id="frameCp"></div>
+  <input id="frameColor" type="hidden" value="#ffffff">
+  <p id="frameInfo" class="dlg-note"></p>
+  <p id="frameErr" class="dlg-err" hidden></p>
+  <div class="dlg-actions"><button id="frameCancel" type="button" data-i18n="common.cancel"></button><button id="frameOk" type="button" class="primary" data-i18n="framedlg.apply"></button></div>
 </dialog>
 <dialog id="nameDlg" aria-labelledby="nameTitle">
   <h2 id="nameTitle"></h2>

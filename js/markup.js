@@ -1,7 +1,7 @@
 i18n.ready.then(()=>{          // wait until the locale strings are loaded
 const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
-let bg=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,viewW=0,viewH=0,cur=null,panning=false;
+let bg=null,bg0=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,viewW=0,viewH=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
 const ptrs=new Map();let pinch=null,last=null,fillTap=null,tapTrack=null;
 let pending=null;   // rectangle/circle/star that has been drawn but not placed yet (see "pending shape" below)
@@ -134,7 +134,22 @@ function commitFill(f){
   const o={t:'fill',c:f.c,x,y,tol:FILL_TOL};
   applyFill(o);ops.push(o);redoStack=[];persist();ui();render();
 }
-function replay(){lc.clearRect(0,0,L.width,L.height);ops.forEach(o=>drawOp(lc,o))}
+// bg0 is the background as loaded or created; bg is what is shown: bg0 enlarged by the "frame" operations of the
+// history (Resize frame). The drawing layer L always has the size of bg. Coordinates of an operation are
+// those of the image as it was when the operation was made, so frames never rewrite earlier operations.
+function newLayer(w,h){L=document.createElement('canvas');L.width=w;L.height=h;lc=L.getContext('2d')}
+function applyFrame(o){   // enlarge the background (new area filled with o.c) and the drawing layer, content shifted by left/top
+  const w=bg.width+o.left+o.right,h=bg.height+o.top+o.bottom;
+  const nb=document.createElement('canvas');nb.width=w;nb.height=h;
+  const x=nb.getContext('2d');x.fillStyle=o.c;x.fillRect(0,0,w,h);x.drawImage(bg,o.left,o.top);
+  const old=L;newLayer(w,h);lc.drawImage(old,o.left,o.top);
+  bg=nb;
+}
+function replay(){
+  bg=bg0;
+  if(L.width!==bg.width||L.height!==bg.height)newLayer(bg.width,bg.height);else lc.clearRect(0,0,L.width,L.height);
+  for(const o of ops){if(o.t==='frame')applyFrame(o);else drawOp(lc,o)}
+}
 
 /* ---------- view ---------- */
 function resize(){
@@ -354,7 +369,7 @@ cv.addEventListener('wheel',e=>{
 /* ---------- UI ---------- */
 function ui(){
   showSize();
-  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miExport').disabled=!bg;$('clear').disabled=!bg;
+  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miResize').disabled=!bg;$('miExport').disabled=!bg;$('clear').disabled=!bg;
   $('hint').style.display=bg?'none':'flex';
 }
 // The last drawing tool used before the eraser (not Move, not the eraser itself). Choosing a color while the
@@ -410,12 +425,14 @@ $('widthL').oninput=e=>setWidth((+e.target.value));
 function clearWork(all){
   if(!all&&!ops.length&&!pending){msg(t('msg.nothingToClear'));return}
   if(!confirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
+  const baked=!all&&ops.some(o=>o.t==='frame');   // clearing the drawing keeps the (enlarged) background
+  if(baked)bg0=bg;
   cur=null;ops=[];redoStack=[];discardPending();resetNames();
   if(all){
-    bg=L=lc=null;
+    bg=bg0=L=lc=null;
     try{localStorage.removeItem('markup.bg');localStorage.removeItem('markup.ops')}catch(e){}
     msg(t('msg.removedAll'));
-  }else{replay();persist();msg(t('msg.cleared'))}
+  }else{replay();persist(baked);msg(t('msg.cleared'))}
   ui();render();
 }
 (()=>{
@@ -432,8 +449,8 @@ function clearWork(all){
   b.addEventListener('contextmenu',e=>e.preventDefault());
   b.addEventListener('click',e=>{if(e.detail===0&&!b.disabled)clearWork(false)}); // keyboard
 })();
-$('undo').onclick=()=>{commitPending();if(!ops.length)return;redoStack.push(ops.pop());replay();persist();ui();render()};
-$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);drawOp(lc,o);persist();ui();render()};
+$('undo').onclick=()=>{commitPending();if(!ops.length)return;const o=ops.pop();redoStack.push(o);replay();persist();ui();if(o.t==='frame')fit();else render()};
+$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);if(o.t==='frame'){applyFrame(o);persist();ui();fit()}else{drawOp(lc,o);persist();ui();render()}};
 $('zi').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(1.25,r.width/2,r.height/2)};
 $('zo').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(.8,r.width/2,r.height/2)};
 $('fit').onclick=fit;
@@ -459,7 +476,7 @@ function setBackground(img){
   const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));
   const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
   const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
-  bg=c;L=document.createElement('canvas');L.width=c.width;L.height=c.height;lc=L.getContext('2d');showSize();
+  bg=bg0=c;newLayer(c.width,c.height);showSize();
 }
 $('file').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
@@ -473,7 +490,7 @@ $('file').onchange=e=>{
 /* ---------- local storage ---------- */
 function persist(withBg){
   try{
-    if(withBg)localStorage.setItem('markup.bg',bg.toDataURL('image/jpeg',.88));
+    if(withBg)localStorage.setItem('markup.bg',bg0.toDataURL('image/jpeg',.88));
     localStorage.setItem('markup.ops',JSON.stringify(ops));
   }catch(err){msg(t('msg.storageFull'))}
 }
@@ -503,7 +520,7 @@ function saveJpeg(name){
 function exportStatus(name){
   const st={
     format:'markup-status',version:1,exportedAt:new Date().toISOString(),
-    background:bg.toDataURL('image/jpeg',.88),
+    background:bg0.toDataURL('image/jpeg',.88),   // the original background; the frames are in the operations
     operations:ops,
     preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase}
   };
@@ -512,6 +529,7 @@ function exportStatus(name){
 const num=v=>typeof v==='number'&&isFinite(v);
 const pt=p=>Array.isArray(p)&&p.length===2&&num(p[0])&&num(p[1]);
 function validOp(o){
+  if(o&&o.t==='frame')return [o.top,o.right,o.bottom,o.left].every(v=>Number.isInteger(v)&&v>=0&&v<=MAXDIM)&&typeof o.c==='string'&&/^#[0-9a-f]{6}$/i.test(o.c);
   if(o&&o.t==='fill')return typeof o.c==='string'&&num(o.x)&&num(o.y)&&num(o.tol);
   if(!o||typeof o!=='object'||!num(o.w)||typeof o.c!=='string')return false;
   if(o.t==='pen'||o.t==='erase')return Array.isArray(o.p)&&o.p.length>0&&o.p.every(pt);
@@ -530,6 +548,9 @@ function importStatus(file){
     if(bg&&!confirm(t('confirm.import')))return;
     const img=new Image();
     img.onload=()=>{
+      const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));let W=Math.round(img.width*k),H=Math.round(img.height*k);
+      for(const o of st.operations)if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}
+      if(W>MAXDIM||H>MAXDIM){msg(t('msg.badStatus'));return}   // the frames would make the image too large
       setBackground(img);cur=null;ops=st.operations;redoStack=[];discardPending();resetNames();replay();
       const p=st.preferences||{};
       if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
@@ -545,14 +566,15 @@ function importStatus(file){
 
 /* ---------- main menu ---------- */
 (()=>{
-  const btn=$('menuBtn'),list=$('menuList'),sub=$('subNew'),miNew=$('miNew');
+  const btn=$('menuBtn'),list=$('menuList');
+  const subs=[{mi:$('miNew'),sub:$('subNew')},{mi:$('miResize'),sub:$('subResize')}];   // submenus: the parent entry and its list
   const items=()=>[...list.querySelectorAll('button:not(:disabled)')].filter(b=>b.offsetParent!==null);
-  function toggleSub(show){
-    sub.hidden=!show;miNew.setAttribute('aria-expanded',String(show));
+  function toggleSub(sb,show){
+    for(const x of subs){const v=x===sb&&show;x.sub.hidden=!v;x.mi.setAttribute('aria-expanded',String(v))}   // one at a time
     if(!list.hidden)placePopup(list,btn);     // the menu got taller or shorter
   }
   function open(){
-    toggleSub(false);list.hidden=false;placePopup(list,btn);
+    toggleSub(null,false);list.hidden=false;placePopup(list,btn);
     btn.setAttribute('aria-expanded','true');
   }
   function close(focusBtn){list.hidden=true;btn.setAttribute('aria-expanded','false');if(focusBtn)btn.focus()}
@@ -560,15 +582,17 @@ function importStatus(file){
   addEventListener('pointerdown',e=>{if(!list.hidden&&!$('mainMenu').contains(e.target))close()});
   list.addEventListener('keydown',e=>{
     const it=items(),i=it.indexOf(document.activeElement);
+    const parent=subs.find(x=>x.mi===document.activeElement),inSub=subs.find(x=>x.sub.contains(document.activeElement));
     if(e.key==='Escape'){close(true)}
     else if(e.key==='ArrowDown'){it[(i+1)%it.length]?.focus()}
     else if(e.key==='ArrowUp'){it[(i-1+it.length)%it.length]?.focus()}
-    else if(e.key==='ArrowRight'&&document.activeElement===miNew){toggleSub(true);items()[i+1]?.focus()}
-    else if(e.key==='ArrowLeft'&&sub.contains(document.activeElement)){toggleSub(false);miNew.focus()}
+    else if(e.key==='ArrowRight'&&parent){toggleSub(parent,true);items()[i+1]?.focus()}
+    else if(e.key==='ArrowLeft'&&inSub){toggleSub(inSub,false);inSub.mi.focus()}
     else return;
     e.preventDefault();e.stopPropagation();
   });
-  miNew.onclick=()=>toggleSub(sub.hidden);
+  for(const x of subs)x.mi.onclick=()=>toggleSub(x,x.sub.hidden);
+  $('miFrame').onclick=()=>{close();openFrameDialog()};
   $('miOpen').onclick=()=>{close();$('file').click()};
   $('miEmpty').onclick=()=>{close();openNewDialog()};
   $('miJpeg').onclick=()=>{close();commitPending();askFileName('jpeg')};
@@ -740,6 +764,44 @@ function createEmptyImage(){
 }
 $('newOk').onclick=createEmptyImage;
 $('newCancel').onclick=()=>newDlg.close();
+/* ---------- resize frame ---------- */
+// Adds a band of the chosen color around the background. It is a "frame" operation in the history, so it can
+// be undone and redone like any drawing; the image grows, the existing content keeps its look.
+const frameDlg=$('frameDlg'),FR_IDS=['frT','frR','frB','frL'];
+const frameColorPicker=createColorPicker({mount:$('frameCp'),input:$('frameColor'),palette:PALETTE,fixed:true,onChange(){}});
+let lastFrameColor='#ffffff';
+function frameAmounts(){   // [top,right,bottom,left], or null when a field is not a whole number >= 0
+  const v=FR_IDS.map(id=>$(id).value.trim()||'0');
+  return v.every(x=>/^\d{1,5}$/.test(x))?v.map(x=>parseInt(x,10)):null;
+}
+function updateFrameInfo(){
+  const a=frameAmounts();
+  $('frameInfo').textContent=a?t('framedlg.size',{w:bg.width+a[1]+a[3],h:bg.height+a[0]+a[2]}):'';
+}
+function openFrameDialog(){
+  if(!bg)return;
+  commitPending();
+  FR_IDS.forEach(id=>$(id).value='0');
+  $('frameErr').hidden=true;$('frameColor').value=lastFrameColor;frameColorPicker.set(lastFrameColor);frameColorPicker.close();
+  updateFrameInfo();
+  frameDlg.showModal();
+  $('frameTitle').focus({preventScroll:true});   // no on-screen keyboard
+}
+function applyFrameDialog(){
+  const a=frameAmounts(),err=k=>{$('frameErr').textContent=t(k,{max:MAXDIM});$('frameErr').hidden=false};
+  if(!a){err('framedlg.errNum');return}
+  if(!a.some(v=>v>0)){err('framedlg.errNone');return}
+  const w=bg.width+a[1]+a[3],h=bg.height+a[0]+a[2];
+  if(w>MAXDIM||h>MAXDIM){err('framedlg.errSize');return}
+  const o={t:'frame',top:a[0],right:a[1],bottom:a[2],left:a[3],c:$('frameColor').value};
+  lastFrameColor=o.c;frameDlg.close();
+  ops.push(o);redoStack=[];applyFrame(o);persist();ui();fit();
+  msg(t('msg.framed',{w,h}));
+}
+FR_IDS.forEach(id=>$(id).addEventListener('input',()=>{$('frameErr').hidden=true;updateFrameInfo()}));
+$('frameOk').onclick=applyFrameDialog;
+$('frameCancel').onclick=()=>frameDlg.close();
+frameDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type==='number'){e.preventDefault();applyFrameDialog()}});
 newDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type==='number'){e.preventDefault();createEmptyImage()}});
 
 /* ---------- file names (Save JPEG / Export status) ---------- */
