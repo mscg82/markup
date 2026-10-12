@@ -30,6 +30,8 @@
   "tool.shapes.label": "Shapes",
   "tool.shapes.title": "Shapes – line, rectangle, circle, star",
   "tool.line.label": "Line",
+  "tool.arrow.label": "Arrow",
+  "tool.arrow.title": "Arrow – straight line with an arrow head at the end point",
   "tool.line.title": "Line – straight line",
   "tool.rect.label": "Rectangle",
   "tool.rect.title": "Rectangle – drag from corner to corner",

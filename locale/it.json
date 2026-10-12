@@ -30,6 +30,8 @@
   "tool.shapes.label": "Forme",
   "tool.shapes.title": "Forme – linea, rettangolo, cerchio, stella",
   "tool.line.label": "Linea",
+  "tool.arrow.label": "Freccia",
+  "tool.arrow.title": "Freccia – linea retta con la punta di freccia nel punto finale",
   "tool.line.title": "Linea – linea retta",
   "tool.rect.label": "Rettangolo",
   "tool.rect.title": "Rettangolo – trascina da un angolo a quello opposto",

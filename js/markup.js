@@ -66,6 +66,16 @@ function drawOp(c,o){
     c.moveTo(q[0],q[1]);
     for(let i=1;i<o.p.length;i++)c.lineTo(o.p[i][0],o.p[i][1]);
   }else if(o.t==='line'){c.moveTo(...o.a);c.lineTo(...o.b)}
+  else if(o.t==='arrow'){   // a line with a filled triangular head whose tip is exactly the end point
+    const dx=o.b[0]-o.a[0],dy=o.b[1]-o.a[1],len=Math.hypot(dx,dy);
+    if(len>0){
+      const ux=dx/len,uy=dy/len,hl=Math.min(Math.max(20,o.w*4),len),hw=hl*0.45;
+      const bx=o.b[0]-ux*hl,by=o.b[1]-uy*hl;   // middle of the head's base
+      c.moveTo(...o.a);c.lineTo(bx,by);c.stroke();
+      c.beginPath();c.moveTo(...o.b);c.lineTo(bx-uy*hw,by+ux*hw);c.lineTo(bx+uy*hw,by-ux*hw);c.closePath();
+      c.fillStyle=c.strokeStyle;c.fill();c.restore();return;
+    }
+  }
   else if(o.t==='rect'){c.rect(o.a[0],o.a[1],o.b[0]-o.a[0],o.b[1]-o.a[1])}
   else if(o.t==='circle'){c.arc(o.a[0],o.a[1],Math.hypot(o.b[0]-o.a[0],o.b[1]-o.a[1]),0,Math.PI*2)}
   else if(o.t==='star'){   // classic 5-pointed star inscribed in the circle drawn from the center a through b, one point up
@@ -505,7 +515,7 @@ function validOp(o){
   if(o&&o.t==='fill')return typeof o.c==='string'&&num(o.x)&&num(o.y)&&num(o.tol);
   if(!o||typeof o!=='object'||!num(o.w)||typeof o.c!=='string')return false;
   if(o.t==='pen'||o.t==='erase')return Array.isArray(o.p)&&o.p.length>0&&o.p.every(pt);
-  if(o.t==='line'||o.t==='rect'||o.t==='circle'||o.t==='star')return pt(o.a)&&pt(o.b);
+  if(o.t==='line'||o.t==='arrow'||o.t==='rect'||o.t==='circle'||o.t==='star')return pt(o.a)&&pt(o.b);
   return false;
 }
 function importStatus(file){
