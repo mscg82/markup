@@ -26,7 +26,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v19';   // keep in step with CACHE in sw.js
+const APP_VERSION='v20';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -145,10 +145,57 @@ function applyFrame(o){   // enlarge the background (new area filled with o.c) a
   const old=L;newLayer(w,h);lc.drawImage(old,o.left,o.top);
   bg=nb;
 }
+// Bicubic resampling (Keys kernel, a = -0.5, the same as Pillow's BICUBIC): two separable passes. When the image is
+// reduced the kernel is stretched by the scale factor, so shrinking is smooth instead of aliased.
+const cubic=x=>{x=Math.abs(x);return x<1?(1.5*x-2.5)*x*x+1:x<2?((-0.5*x+2.5)*x-4)*x+2:0};
+function cubicWeights(srcN,dstN){
+  const sc=srcN/dstN,fs=Math.max(1,sc),support=2*fs,out=new Array(dstN);
+  for(let i=0;i<dstN;i++){
+    const c=(i+0.5)*sc,x0=Math.max(0,Math.floor(c-support+0.5)),x1=Math.min(srcN,Math.floor(c+support+0.5)),w=new Float32Array(Math.max(1,x1-x0));
+    let sum=0;
+    for(let x=x0;x<x1;x++){const v=cubic((x-c+0.5)/fs);w[x-x0]=v;sum+=v}
+    if(sum)for(let k=0;k<w.length;k++)w[k]/=sum;else w[0]=1;
+    out[i]={x0,w};
+  }
+  return out;
+}
+function resampleCanvas(src,dw,dh){
+  const sw=src.width,sh=src.height,sd=src.getContext('2d').getImageData(0,0,sw,sh).data;
+  const tmp=new Uint8ClampedArray(dw*sh*4),wx=cubicWeights(sw,dw),wy=cubicWeights(sh,dh);
+  for(let y=0;y<sh;y++){                       // horizontal pass
+    const row=y*sw*4;
+    for(let i=0;i<dw;i++){
+      const {x0,w}=wx[i];let r=0,g=0,b=0,a=0;
+      for(let k=0;k<w.length;k++){const p=row+(x0+k)*4,v=w[k];r+=sd[p]*v;g+=sd[p+1]*v;b+=sd[p+2]*v;a+=sd[p+3]*v}
+      const o=(y*dw+i)*4;tmp[o]=r;tmp[o+1]=g;tmp[o+2]=b;tmp[o+3]=a;
+    }
+  }
+  const out=document.createElement('canvas');out.width=dw;out.height=dh;
+  const oc=out.getContext('2d'),img=oc.createImageData(dw,dh),od=img.data;
+  for(let j=0;j<dh;j++){                       // vertical pass
+    const {x0,w}=wy[j];
+    for(let i=0;i<dw;i++){
+      let r=0,g=0,b=0,a=0;
+      for(let k=0;k<w.length;k++){const p=((x0+k)*dw+i)*4,v=w[k];r+=tmp[p]*v;g+=tmp[p+1]*v;b+=tmp[p+2]*v;a+=tmp[p+3]*v}
+      const o=(j*dw+i)*4;od[o]=r;od[o+1]=g;od[o+2]=b;od[o+3]=a;
+    }
+  }
+  oc.putImageData(img,0,0);
+  return out;
+}
+let scaleCache=null;   // replay() runs on every undo: remember the last resampled background instead of recomputing it
+function applyScale(o){   // "scale" operation: the background is resampled to o.w x o.h (it is only created when the history is empty)
+  if(!(scaleCache&&scaleCache.src===bg&&scaleCache.w===o.w&&scaleCache.h===o.h))scaleCache={src:bg,w:o.w,h:o.h,c:resampleCanvas(bg,o.w,o.h)};
+  const nb=scaleCache.c;
+  const old=L;newLayer(o.w,o.h);lc.imageSmoothingQuality='high';lc.drawImage(old,0,0,o.w,o.h);
+  bg=nb;
+}
+const isResizeOp=o=>o.t==='frame'||o.t==='scale';
+const applyResizeOp=o=>o.t==='frame'?applyFrame(o):applyScale(o);
 function replay(){
   bg=bg0;
   if(L.width!==bg.width||L.height!==bg.height)newLayer(bg.width,bg.height);else lc.clearRect(0,0,L.width,L.height);
-  for(const o of ops){if(o.t==='frame')applyFrame(o);else drawOp(lc,o)}
+  for(const o of ops){if(isResizeOp(o))applyResizeOp(o);else drawOp(lc,o)}
 }
 
 /* ---------- view ---------- */
@@ -425,7 +472,7 @@ $('widthL').oninput=e=>setWidth((+e.target.value));
 function clearWork(all){
   if(!all&&!ops.length&&!pending){msg(t('msg.nothingToClear'));return}
   if(!confirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
-  const baked=!all&&ops.some(o=>o.t==='frame');   // clearing the drawing keeps the (enlarged) background
+  const baked=!all&&ops.some(isResizeOp);   // clearing the drawing keeps the (enlarged) background
   if(baked)bg0=bg;
   cur=null;ops=[];redoStack=[];discardPending();resetNames();
   if(all){
@@ -449,8 +496,8 @@ function clearWork(all){
   b.addEventListener('contextmenu',e=>e.preventDefault());
   b.addEventListener('click',e=>{if(e.detail===0&&!b.disabled)clearWork(false)}); // keyboard
 })();
-$('undo').onclick=()=>{commitPending();if(!ops.length)return;const o=ops.pop();redoStack.push(o);replay();persist();ui();if(o.t==='frame')fit();else render()};
-$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);if(o.t==='frame'){applyFrame(o);persist();ui();fit()}else{drawOp(lc,o);persist();ui();render()}};
+$('undo').onclick=()=>{commitPending();if(!ops.length)return;const o=ops.pop();redoStack.push(o);replay();persist();ui();if(isResizeOp(o))fit();else render()};
+$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);if(isResizeOp(o)){applyResizeOp(o);persist();ui();fit()}else{drawOp(lc,o);persist();ui();render()}};
 $('zi').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(1.25,r.width/2,r.height/2)};
 $('zo').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(.8,r.width/2,r.height/2)};
 $('fit').onclick=fit;
@@ -529,6 +576,7 @@ function exportStatus(name){
 const num=v=>typeof v==='number'&&isFinite(v);
 const pt=p=>Array.isArray(p)&&p.length===2&&num(p[0])&&num(p[1]);
 function validOp(o){
+  if(o&&o.t==='scale')return Number.isInteger(o.w)&&Number.isInteger(o.h)&&o.w>=1&&o.h>=1&&o.w<=MAXDIM&&o.h<=MAXDIM;
   if(o&&o.t==='frame')return [o.top,o.right,o.bottom,o.left].every(v=>Number.isInteger(v)&&v>=0&&v<=MAXDIM)&&typeof o.c==='string'&&/^#[0-9a-f]{6}$/i.test(o.c);
   if(o&&o.t==='fill')return typeof o.c==='string'&&num(o.x)&&num(o.y)&&num(o.tol);
   if(!o||typeof o!=='object'||!num(o.w)||typeof o.c!=='string')return false;
@@ -549,7 +597,7 @@ function importStatus(file){
     const img=new Image();
     img.onload=()=>{
       const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));let W=Math.round(img.width*k),H=Math.round(img.height*k);
-      for(const o of st.operations)if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}
+      for(const o of st.operations){if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}else if(o.t==='scale'){W=o.w;H=o.h}}
       if(W>MAXDIM||H>MAXDIM){msg(t('msg.badStatus'));return}   // the frames would make the image too large
       setBackground(img);cur=null;ops=st.operations;redoStack=[];discardPending();resetNames();replay();
       const p=st.preferences||{};
@@ -593,6 +641,7 @@ function importStatus(file){
   });
   for(const x of subs)x.mi.onclick=()=>toggleSub(x,x.sub.hidden);
   $('miFrame').onclick=()=>{close();openFrameDialog()};
+  $('miScale').onclick=()=>{close();openScaleDialog()};
   $('miOpen').onclick=()=>{close();$('file').click()};
   $('miEmpty').onclick=()=>{close();openNewDialog()};
   $('miJpeg').onclick=()=>{close();commitPending();askFileName('jpeg')};
@@ -764,6 +813,52 @@ function createEmptyImage(){
 }
 $('newOk').onclick=createEmptyImage;
 $('newCancel').onclick=()=>newDlg.close();
+/* ---------- resize background ---------- */
+// Scales the background (bicubic) to new dimensions. Only possible when the history is empty, because the
+// operations already drawn are in the coordinates of the current size; the scaling itself is a "scale"
+// operation in the history, so it can be undone and redone.
+const scaleDlg=$('scaleDlg');
+let scaleRatio=1;
+function scaleValues(){
+  const w=$('scW').value.trim(),h=$('scH').value.trim();
+  if(!/^\d{1,5}$/.test(w)||!/^\d{1,5}$/.test(h))return null;
+  return [parseInt(w,10),parseInt(h,10)];
+}
+function openScaleDialog(){
+  if(!bg)return;
+  if(ops.length||pending){alert(t('scaledlg.needClear'));return}   // the history must be empty
+  scaleRatio=bg.width/bg.height;
+  $('scW').value=bg.width;$('scH').value=bg.height;$('scKeep').checked=true;$('scaleErr').hidden=true;
+  $('scaleCur').textContent=t('scaledlg.current',{w:bg.width,h:bg.height});
+  scaleDlg.showModal();
+  $('scaleTitle').focus({preventScroll:true});   // no on-screen keyboard
+}
+function applyScaleDialog(){
+  const v=scaleValues();
+  if(!v||!v.every(x=>x>=16&&x<=MAXDIM)){$('scaleErr').textContent=t('scaledlg.err',{min:16,max:MAXDIM});$('scaleErr').hidden=false;return}
+  if(v[0]===bg.width&&v[1]===bg.height){$('scaleErr').textContent=t('scaledlg.same');$('scaleErr').hidden=false;return}
+  const o={t:'scale',w:v[0],h:v[1]};
+  scaleDlg.close();
+  ops.push(o);redoStack=[];applyScale(o);persist();ui();fit();
+  msg(t('msg.scaled',{w:o.w,h:o.h}));
+}
+$('scW').addEventListener('input',()=>{
+  $('scaleErr').hidden=true;
+  const w=parseInt($('scW').value,10);
+  if($('scKeep').checked&&w>0)$('scH').value=Math.max(1,Math.round(w/scaleRatio));
+});
+$('scH').addEventListener('input',()=>{
+  $('scaleErr').hidden=true;
+  const h=parseInt($('scH').value,10);
+  if($('scKeep').checked&&h>0)$('scW').value=Math.max(1,Math.round(h*scaleRatio));
+});
+$('scKeep').addEventListener('change',()=>{   // switching the lock on snaps the height to the width
+  if($('scKeep').checked){const w=parseInt($('scW').value,10);if(w>0)$('scH').value=Math.max(1,Math.round(w/scaleRatio))}
+});
+$('scaleOk').onclick=applyScaleDialog;
+$('scaleCancel').onclick=()=>scaleDlg.close();
+scaleDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type==='number'){e.preventDefault();applyScaleDialog()}});
+
 /* ---------- resize frame ---------- */
 // Adds a band of the chosen color around the background. It is a "frame" operation in the history, so it can
 // be undone and redone like any drawing; the image grows, the existing content keeps its look.

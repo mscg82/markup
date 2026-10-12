@@ -30,6 +30,7 @@
         <button role="menuitem" id="miResize" aria-haspopup="menu" aria-expanded="false"><span data-i18n="menu.resize"></span><span class="chev" aria-hidden="true">▸</span></button>
         <div id="subResize" class="sub" role="menu" hidden>
           <button role="menuitem" id="miFrame" data-i18n="menu.resizeFrame" data-i18n-title="menu.resizeFrame.title"></button>
+          <button role="menuitem" id="miScale" data-i18n="menu.resizeBg" data-i18n-title="menu.resizeBg.title"></button>
         </div>
         <hr role="separator">
         <button role="menuitem" id="miJpeg" disabled data-i18n="menu.saveJpeg" data-i18n-title="menu.saveJpeg.title"></button>
@@ -122,6 +123,17 @@
   <input id="newColor" type="hidden" value="#ffffff">
   <p id="newErr" class="dlg-err" hidden></p>
   <div class="dlg-actions"><button id="newCancel" type="button" data-i18n="common.cancel"></button><button id="newOk" type="button" class="primary" data-i18n="newdlg.create"></button></div>
+</dialog>
+<dialog id="scaleDlg" aria-labelledby="scaleTitle">
+  <h2 id="scaleTitle" tabindex="-1" data-i18n="scaledlg.title"></h2>
+  <p id="scaleCur" class="dlg-note"></p>
+  <div class="dlg-row">
+    <label><span data-i18n="newdlg.width"></span><input id="scW" type="number" inputmode="numeric" min="16" max="2400"></label>
+    <label><span data-i18n="newdlg.height"></span><input id="scH" type="number" inputmode="numeric" min="16" max="2400"></label>
+  </div>
+  <label class="chk"><input id="scKeep" type="checkbox" checked><span data-i18n="scaledlg.keep"></span></label>
+  <p id="scaleErr" class="dlg-err" hidden></p>
+  <div class="dlg-actions"><button id="scaleCancel" type="button" data-i18n="common.cancel"></button><button id="scaleOk" type="button" class="primary" data-i18n="scaledlg.apply"></button></div>
 </dialog>
 <dialog id="frameDlg" aria-labelledby="frameTitle">
   <h2 id="frameTitle" tabindex="-1" data-i18n="framedlg.title"></h2>

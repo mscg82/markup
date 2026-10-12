@@ -94,6 +94,8 @@ html:not(.i18n-ready) body{visibility:hidden}
 
 /* color picker inside the new-image dialog: a color bar that opens a popover with the palette on the side */
 #newCp .cp-btn,#frameCp .cp-btn{width:100%}
+.chk{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:14px;cursor:pointer;margin-top:2px}
+.chk input{width:18px;height:18px;margin:0;accent-color:var(--acc)}
 /* resize-frame dialog: the four edge inputs around a placeholder for the current image (3x3 table) */
 .frame-grid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,auto);gap:8px;align-items:center;margin-bottom:14px}
 .frame-grid label{display:flex;flex-direction:column;gap:4px;color:var(--mute);font-size:12px;text-align:center}
