@@ -14,12 +14,13 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 - **Rotation:** when the view changes shape (for example the device is rotated between portrait and landscape) the zoom level is kept and the part of the image that was in the center of the view stays in the center.
 - **Toolbar position:** the toolbar can be attached to the top (default) or to the left of the screen, which leaves more vertical room for drawing on a phone held in landscape. The button to the left of **Move** switches between the two (its icon shows where a click sends the toolbar). Holding it for about half a second selects **automatic** mode: left in landscape, top in portrait. On the left, the toolbar is arranged in rows and the color and width controls are collapsed into buttons. The choice is saved in local storage on each device (it is not part of Export status).
 - **Responsive toolbar:** the line-width slider stays inline while it has at least about 250 px; when the toolbar is too narrow for that it collapses into a button (showing the current width) that opens a popup with a longer slider. Below about 1040 px the quick-color circles also move into the color picker popup.
-- **Eraser:** removes only your drawing, never the background.
+- **Eraser:** removes only your drawing, never the background. Picking a color while the eraser is active switches back to the drawing tool you used before it (the pen if there was none), so you can go on drawing with the new color.
 - **Undo and redo:** every stroke or shape is an operation in a history list. Undo (or Ctrl/Cmd+Z) removes the last one and Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y) puts it back. The redo list is emptied as soon as you draw something new, and it is not saved between sessions.
 - **Clear:** a click clears the drawing and keeps the background; a long press (about 0.7 s) removes the background too. Both ask for confirmation, and neither can be undone.
 - **Zoom and pan:** mouse wheel, pinch, or the −, Fit and + buttons to zoom. To pan, use the Move tool, two fingers, Space + drag, the right or middle mouse button, or the arrow keys.
 - **Settings (☰ → Settings):** the interface language (a dropdown of the available languages, or Automatic) and the default width and height of a new image (16–2400 px). They are saved in local storage and applied when the app loads. Changing the language reloads the app.
 - **Main menu (☰):** *New* offers *Open image* and *Empty image* (you choose the width and height, up to 2400 px, and the background color; white by default). *Save JPEG* asks for a file name and downloads the background and drawing merged at the background's full resolution. *Export status* asks for a file name and downloads a JSON file with the background, the full list of operations and the saved settings (color and widths). *Import status* restores such a file, for example on another device. *Reload application* (after *Settings*) discards the service worker and its cached files and reloads the page from the server, which is the way to pick up a new version right away; your work and settings are kept. It needs a connection.
+- **Image size:** a small label in the bottom-left corner of the canvas area shows the size of the image being edited in pixels (after the 2400 px downscale, if any). The bottom-right label shows the application version.
 - **Persistence:** the background, the full operation list, the selected color and the tool widths are saved automatically and restored on reopening.
 - **Installable and offline:** a web app manifest and a service worker let you add the app to the home screen and use it without a connection.
 
@@ -63,7 +64,7 @@ Upload all the files and folders to any static host (GitHub Pages, Netlify, Ngin
 
 - Serve over **HTTPS** so the service worker and the install option work (`localhost` is also fine for testing).
 - Serve `manifest.webmanifest` as `application/manifest+json` (or `application/json`).
-- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v19`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
+- To publish a new version, change the `CACHE` name at the top of `sw.js` (for example `markup-v20`) so installed copies drop the old files. Also update `APP_VERSION` at the top of `js/markup.js` so the version label shown in the bottom-right corner of the app matches.
 
 ### GitHub Pages
 

@@ -1,6 +1,8 @@
 {
   "app.title": "Markup – disegna su un'immagine",
   "app.version": "Markup {version}",
+  "app.imageSize": "{w} × {h} px",
+  "app.imageSizeLabel": "Dimensione immagine in pixel",
   "app.versionLabel": "Versione dell'applicazione",
   "menu.button": "Menu",
   "menu.new": "Nuovo",

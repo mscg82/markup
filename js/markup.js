@@ -26,7 +26,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v18';   // keep in step with CACHE in sw.js
+const APP_VERSION='v19';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -343,12 +343,22 @@ cv.addEventListener('wheel',e=>{
 
 /* ---------- UI ---------- */
 function ui(){
+  showSize();
   $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miExport').disabled=!bg;$('clear').disabled=!bg;
   $('hint').style.display=bg?'none':'flex';
+}
+// The last drawing tool used before the eraser (not Move, not the eraser itself). Choosing a color while the
+// eraser is active switches back to it, or to the pen when there is none.
+let lastEditTool=null;
+function leaveEraser(){
+  if(tool!=='erase')return;
+  const b=document.querySelector(`button[data-t="${lastEditTool||'pen'}"]`)||document.querySelector('button[data-t="pen"]');
+  b.click();
 }
 document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
   commitPending();
   tool=b.dataset.t;
+  if(tool!=='erase'&&tool!=='pan')lastEditTool=tool;
   document.querySelectorAll('button[data-t]').forEach(x=>x.setAttribute('aria-pressed',x===b));
   const isShape=!!b.closest('#shapesList');
   $('shapesBtn').setAttribute('aria-pressed',String(isShape));
@@ -380,10 +390,10 @@ const PALETTE=['#e63946','#f77f00','#fcbf49','#2a9d8f','#06d6a0','#118ab2','#7b2
 const sw=$('sw');
 PALETTE.forEach(c=>{
   const b=document.createElement('button');b.style.background=c;b.dataset.c=c;b.title=c;b.setAttribute('aria-label',t('color.swatch',{color:c}));
-  b.onclick=()=>{$('color').value=c;if(pending){pending.c=c;render()}markSw();savePrefs()};sw.appendChild(b);
+  b.onclick=()=>{leaveEraser();$('color').value=c;if(pending){pending.c=c;render()}markSw();savePrefs()};sw.appendChild(b);
 });
 function markSw(){const v=$('color').value.toLowerCase();picker.set(v);sw.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===v))}
-const picker=createColorPicker({mount:$('cp'),input:$('color'),palette:PALETTE,onChange:(c,final)=>{markSw();if(pending){pending.c=c;render()}if(final)savePrefs()}});
+const picker=createColorPicker({mount:$('cp'),input:$('color'),palette:PALETTE,onChange:(c,final)=>{leaveEraser();markSw();if(pending){pending.c=c;render()}if(final)savePrefs()}});
 markSw();
 $('width').oninput=e=>setWidth((+e.target.value));
 $('widthL').oninput=e=>setWidth((+e.target.value));
@@ -434,11 +444,12 @@ addEventListener('keyup',e=>{if(e.code==='Space'){spaceDown=false;setCursor()}})
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 
 /* ---------- image loading ---------- */
+function showSize(){$('dim').textContent=bg?t('app.imageSize',{w:bg.width,h:bg.height}):''}   // size of the edited image, bottom-left
 function setBackground(img){
   const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));
   const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
   const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
-  bg=c;L=document.createElement('canvas');L.width=c.width;L.height=c.height;lc=L.getContext('2d');
+  bg=c;L=document.createElement('canvas');L.width=c.width;L.height=c.height;lc=L.getContext('2d');showSize();
 }
 $('file').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;

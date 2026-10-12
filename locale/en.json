@@ -1,6 +1,8 @@
 {
   "app.title": "Markup – draw over an image",
   "app.version": "Markup {version}",
+  "app.imageSize": "{w} × {h} px",
+  "app.imageSizeLabel": "Image size in pixels",
   "app.versionLabel": "Application version",
   "menu.button": "Menu",
   "menu.new": "New",
