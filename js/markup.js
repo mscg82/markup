@@ -26,7 +26,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v20';   // keep in step with CACHE in sw.js
+const APP_VERSION='v21';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -235,12 +235,58 @@ function zoomAt(f,px,py){
 const toImg=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left-ox)/s,(e.clientY-r.top-oy)/s]};
 const local=e=>{const r=cv.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]};
 
+/* ---------- temporary zoom / move (multi-tap and hold) ---------- */
+// Double tap (or double click) and keep the second press down: temporary ZOOM mode, moving up zooms in and
+// moving down zooms out around the pressed point. Triple tap and hold: temporary MOVE mode, any movement pans.
+// Releasing goes back to normal: the selected tool is never changed, so it is simply active again.
+// A quick tap is also a normal action (a pen dot, a fill...), so when the gesture is recognized the effects of
+// the preceding taps are removed from the history again.
+const TAP_MAX_DUR=250,TAP_GAP=350,TAP_DIST=24,TAP_SLOP=8,ZOOM_SENS=150;   // ms, ms, px, px, px per e-fold
+let tmp=null;                                       // active temporary mode: {id,mode,t0,x,y,moved,ly,ax,ay}
+let tapSeq={n:0,tEnd:0,x:0,y:0,type:'',tracked:[]}; // consecutive quick taps so far
+let press=null;                                     // the single press being watched to see if it is a quick tap
+const SHAPE_TOOLS=new Set(['line','arrow','rect','circle','star']);
+function showToolButtons(active){                   // highlight one toolbar tool (null: none) without changing the tool
+  document.querySelectorAll('button[data-t]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.t===active)));
+  $('shapesBtn').setAttribute('aria-pressed',String(SHAPE_TOOLS.has(active)));
+}
+function undoTapOps(){                              // drop what the preceding quick taps did
+  let removed=false;
+  for(const k of tapSeq.tracked.reverse()){
+    if(ops[ops.length-1]===k.op){ops.pop();redoStack=k.redo;removed=true}
+  }
+  tapSeq.tracked=[];
+  if(removed){replay();persist();ui();render()}
+}
+function startTemp(e,mode){
+  undoTapOps();
+  fillTap=null;tapTrack=null;press=null;
+  const q=local(e);
+  tmp={id:e.pointerId,mode,t0:performance.now(),x:e.clientX,y:e.clientY,moved:false,ly:e.clientY,ax:q[0],ay:q[1]};
+  if(mode==='move'){panning=true;last=q;showToolButtons('pan')}
+  else{$('zo').setAttribute('aria-pressed','true');$('zi').setAttribute('aria-pressed','true')}
+  setCursor();
+}
+function endTemp(){
+  if(!tmp)return;
+  tmp=null;panning=false;
+  showToolButtons(tool);$('zo').setAttribute('aria-pressed','false');$('zi').setAttribute('aria-pressed','false');
+  setCursor();
+}
+
 /* ---------- pointer handling ---------- */
 cv.addEventListener('pointerdown',e=>{
   if(!bg)return;cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId,local(e));
-  if(ptrs.size===2){fillTap=null;tapTrack=null;cancelCur();startPinch();return}
+  if(ptrs.size===2){fillTap=null;tapTrack=null;press=null;tapSeq.n=0;endTemp();cancelCur();startPinch();return}
   if(ptrs.size>2)return;
+  if(e.button===0){
+    const now=performance.now();
+    if(tapSeq.n>=1&&now-tapSeq.tEnd<=TAP_GAP&&e.pointerType===tapSeq.type&&Math.hypot(e.clientX-tapSeq.x,e.clientY-tapSeq.y)<=TAP_DIST){
+      startTemp(e,tapSeq.n>=2?'move':'zoom');return;   // second press: zoom, third press: move
+    }
+    press={id:e.pointerId,t0:now,x:e.clientX,y:e.clientY,moved:false,redo:redoStack};
+  }else press=null;
   if(tool==='pan'||spaceDown||e.button===1||e.button===2){panning=true;last=local(e);setCursor();return}
   if(tool==='fill'){fillTap={id:e.pointerId,p:toImg(e),sx:e.clientX,sy:e.clientY,c:$('color').value};return}   // applied on release
   if(pending){tapTrack={id:e.pointerId,sx:e.clientX,sy:e.clientY,p0:toImg(e)};return}   // a tap places the pending shape; a drag places it and starts a new one
@@ -253,6 +299,15 @@ cv.addEventListener('pointermove',e=>{
   if(!ptrs.has(e.pointerId))return;
   ptrs.set(e.pointerId,local(e));
   if(ptrs.size===2&&pinch){updatePinch();return}
+  if(press&&press.id===e.pointerId&&Math.hypot(e.clientX-press.x,e.clientY-press.y)>TAP_SLOP)press.moved=true;
+  if(tmp&&tmp.id===e.pointerId){
+    if(Math.hypot(e.clientX-tmp.x,e.clientY-tmp.y)>TAP_SLOP)tmp.moved=true;
+    if(tmp.mode==='zoom'){
+      const dy=tmp.ly-e.clientY;tmp.ly=e.clientY;     // up = positive = zoom in
+      if(dy)zoomAt(Math.exp(dy/ZOOM_SENS),tmp.ax,tmp.ay);
+      return;
+    }                                                 // move mode: the panning branch below does the work
+  }
   if(panning){const q=local(e);ox+=q[0]-last[0];oy+=q[1]-last[1];last=q;render();return}
   if(fillTap&&fillTap.id===e.pointerId&&Math.hypot(e.clientX-fillTap.sx,e.clientY-fillTap.sy)>10)fillTap=null;   // it was a drag, not a tap
   if(tapTrack&&tapTrack.id===e.pointerId){
@@ -276,8 +331,19 @@ cv.addEventListener('pointermove',e=>{
 function end(e){
   if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
   if(ptrs.size<2)pinch=null;
+  const now=performance.now();
+  if(tmp&&tmp.id===e.pointerId){                   // end of a temporary zoom / move press
+    const quick=e.type==='pointerup'&&!tmp.moved&&now-tmp.t0<=TAP_MAX_DUR,mode=tmp.mode;
+    endTemp();
+    if(mode==='zoom'&&quick){tapSeq.n=2;tapSeq.tEnd=now;tapSeq.x=e.clientX;tapSeq.y=e.clientY;tapSeq.tracked=[]}   // may become a triple tap
+    else tapSeq.n=0;
+    return;
+  }
+  const n0=ops.length;let created=null;
   if(fillTap&&fillTap.id===e.pointerId){const f=fillTap;fillTap=null;if(e.type==='pointerup')commitFill(f)}
+  if(ops.length>n0)created=ops[ops.length-1];
   if(tapTrack&&tapTrack.id===e.pointerId){tapTrack=null;if(e.type==='pointerup')commitPending()}
+  const n1=ops.length;
   if(cur&&e.type==='pointerup'){
     const o=cur;cur=null;
     const degenerate=!o.p&&o.a[0]===o.b[0]&&o.a[1]===o.b[1];
@@ -286,6 +352,13 @@ function end(e){
     else{ops.push(o);redoStack=[];if(o.t==='pen'||o.t==='erase'){}else drawOp(lc,o);persist()}
     ui();render();
   }else if(cur)cancelCur();
+  if(!created&&ops.length>n1)created=ops[ops.length-1];
+  if(press&&press.id===e.pointerId){                // was it a quick tap? then it may be the first tap of a double/triple tap
+    const isTap=e.type==='pointerup'&&!press.moved&&now-press.t0<=TAP_MAX_DUR;
+    if(isTap)tapSeq={n:1,tEnd:now,x:e.clientX,y:e.clientY,type:e.pointerType,tracked:created?[{op:created,redo:press.redo}]:[]};
+    else tapSeq.n=0;
+    press=null;
+  }
   if(ptrs.size===0){panning=false;setCursor()}
 }
 cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
@@ -502,7 +575,7 @@ $('zi').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(1.25,r.width/2,r.
 $('zo').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(.8,r.width/2,r.height/2)};
 $('fit').onclick=fit;
 let spaceDown=false;
-function setCursor(){cv.style.cursor=panning?'grabbing':(tool==='pan'||spaceDown)?'grab':'crosshair'}
+function setCursor(){cv.style.cursor=panning?'grabbing':tmp?'ns-resize':(tool==='pan'||spaceDown)?'grab':'crosshair'}
 addEventListener('keydown',e=>{
   if(e.target.closest&&e.target.closest('dialog'))return;   // let dialogs handle their own keys
   if(e.ctrlKey||e.metaKey){
