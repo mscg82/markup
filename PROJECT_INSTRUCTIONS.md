@@ -28,4 +28,4 @@ fill option for shapes, remembering the selected tool, text tool, offline update
 ## Code conventions
 - When converting a value to a number with unary plus in an assignment, always write `a=(+b)`, never `a=+b`, so it is not mistaken for `+=`.
 
-- Snapshots: stored in localStorage `markup.snapshots` (array of {id,name,created,status}, status = same object as buildStatus()). Restore reuses restoreStatus() shared with Import status. resetSnapshots() is called wherever resetNames() is, except on import/restore.
+- Snapshots: stored in localStorage `markup.snapshots` (array of {id,name,created,status}, status = same object as buildStatus()). Restore reuses restoreStatus() shared with Import status. resetSnapshots() is called wherever resetNames() is, except when restoring a snapshot (Import status from a file does clear them).

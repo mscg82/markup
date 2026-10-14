@@ -679,14 +679,14 @@ function validStatus(st){
   return!!st&&st.format==='markup-status'&&typeof st.background==='string'&&st.background.startsWith('data:image/')&&Array.isArray(st.operations)&&st.operations.every(validOp);
 }
 // Replace the current work with a status object (from a file or a snapshot). The caller has validated it
-// and asked for confirmation. Snapshots are left alone.
-function restoreStatus(st,okMsg){
+// and asked for confirmation. Snapshots are kept, unless dropSnapshots is set (import from a file).
+function restoreStatus(st,okMsg,dropSnapshots){
   const img=new Image();
   img.onload=()=>{
     const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));let W=Math.round(img.width*k),H=Math.round(img.height*k);
     for(const o of st.operations){if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}else if(o.t==='scale'){W=o.w;H=o.h}}
     if(W>MAXDIM||H>MAXDIM){msg(t('msg.badStatus'));return}   // the frames would make the image too large
-    setBackground(img);cur=null;ops=JSON.parse(JSON.stringify(st.operations));redoStack=[];discardPending();resetNames();replay();   // copy: a snapshot must never change
+    setBackground(img);cur=null;ops=JSON.parse(JSON.stringify(st.operations));redoStack=[];discardPending();resetNames();if(dropSnapshots)resetSnapshots();replay();   // copy: a snapshot must never change
     const p=st.preferences||{};
     if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
     if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
@@ -704,7 +704,7 @@ function importStatus(file){
     try{st=JSON.parse(fr.result)}catch(e){msg(t('msg.badJson'));return}
     if(!validStatus(st)){msg(t('msg.badStatus'));return}
     if(bg&&!confirm(t('confirm.import')))return;
-    restoreStatus(st,t('msg.imported'));
+    restoreStatus(st,t('msg.imported'),true);   // an imported file replaces everything, snapshots included
   };
   fr.readAsText(file);
 }
