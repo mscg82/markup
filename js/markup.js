@@ -26,7 +26,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v22';   // keep in step with CACHE in sw.js
+const APP_VERSION='v23';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -679,14 +679,14 @@ function validStatus(st){
   return!!st&&st.format==='markup-status'&&typeof st.background==='string'&&st.background.startsWith('data:image/')&&Array.isArray(st.operations)&&st.operations.every(validOp);
 }
 // Replace the current work with a status object (from a file or a snapshot). The caller has validated it
-// and asked for confirmation. Snapshots are kept, unless dropSnapshots is set (import from a file).
-function restoreStatus(st,okMsg,dropSnapshots){
+// and asked for confirmation. It replaces the background, so the snapshots are dropped.
+function restoreStatus(st,okMsg){
   const img=new Image();
   img.onload=()=>{
     const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));let W=Math.round(img.width*k),H=Math.round(img.height*k);
     for(const o of st.operations){if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}else if(o.t==='scale'){W=o.w;H=o.h}}
     if(W>MAXDIM||H>MAXDIM){msg(t('msg.badStatus'));return}   // the frames would make the image too large
-    setBackground(img);cur=null;ops=JSON.parse(JSON.stringify(st.operations));redoStack=[];discardPending();resetNames();if(dropSnapshots)resetSnapshots();replay();   // copy: a snapshot must never change
+    setBackground(img);cur=null;ops=JSON.parse(JSON.stringify(st.operations));redoStack=[];discardPending();resetNames();resetSnapshots();replay();   // the background changes, so the snapshots go
     const p=st.preferences||{};
     if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
     if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
@@ -704,43 +704,83 @@ function importStatus(file){
     try{st=JSON.parse(fr.result)}catch(e){msg(t('msg.badJson'));return}
     if(!validStatus(st)){msg(t('msg.badStatus'));return}
     if(bg&&!confirm(t('confirm.import')))return;
-    restoreStatus(st,t('msg.imported'),true);   // an imported file replaces everything, snapshots included
+    restoreStatus(st,t('msg.imported'));
   };
   fr.readAsText(file);
 }
 
 /* ---------- snapshots ---------- */
-// Named copies of the full status (same content as Export status), kept in localStorage, newest first.
-// They are not part of the exported JSON, and are dropped when the canvas is replaced or cleared.
+// Named copies of the work, kept in localStorage, newest first. A snapshot stores only the operation list and
+// the preferences, deflate-compressed: the background is NOT copied, because it is always the one already saved
+// in markup.bg. That is safe since everything that replaces the background (Open image, Empty image, Clear,
+// Import status) also clears the snapshots. They are not part of the exported JSON.
+// Entry: {id,name,created,enc,data}; enc 'deflate' = base64 of the deflated JSON, 'json' = plain JSON
+// (used when the browser has no CompressionStream).
 const SNAP_KEY='markup.snapshots';
-let snaps=[];
-try{const a=JSON.parse(localStorage.getItem(SNAP_KEY)||'[]');if(Array.isArray(a))snaps=a.filter(x=>x&&typeof x.name==='string'&&num(x.created)&&validStatus(x.status))}catch(e){snaps=[]}
+let snaps=[],saveSnapsLater=false;
+try{
+  const a=JSON.parse(localStorage.getItem(SNAP_KEY)||'[]');
+  if(Array.isArray(a)){
+    snaps=a.filter(x=>x&&typeof x.name==='string'&&num(x.created)&&typeof x.id==='string'&&typeof x.data==='string'&&(x.enc==='deflate'||x.enc==='json'));
+    if(snaps.length!==a.length)saveSnapsLater=true;   // entries from an older format were dropped
+  }
+}catch(e){snaps=[]}
 function saveSnaps(){
   try{if(snaps.length)localStorage.setItem(SNAP_KEY,JSON.stringify(snaps));else localStorage.removeItem(SNAP_KEY);return true}
   catch(e){return false}
+}
+if(saveSnapsLater)saveSnaps();
+async function streamBytes(bytes,stream){
+  return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+}
+function toBase64(u8){let s='';for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s)}
+function fromBase64(b){const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u}
+async function packSnapshot(obj){
+  const json=JSON.stringify(obj);
+  if(!window.CompressionStream)return{enc:'json',data:json};
+  try{return{enc:'deflate',data:toBase64(await streamBytes(new TextEncoder().encode(json),new CompressionStream('deflate')))}}
+  catch(e){return{enc:'json',data:json}}
+}
+async function unpackSnapshot(s){
+  if(s.enc==='json')return JSON.parse(s.data);
+  return JSON.parse(new TextDecoder().decode(await streamBytes(fromBase64(s.data),new DecompressionStream('deflate'))));
 }
 function resetSnapshots(){snaps=[];try{localStorage.removeItem(SNAP_KEY)}catch(e){}renderSnaps()}
 let renderSnaps=()=>{};   // replaced by the menu code below
 const snapDlg=$('snapDlg');
 function openSnapDialog(){
-  $('snapErr').hidden=true;$('snapInput').value=String(snaps.length+1).padStart(2,'0');
+  $('snapErr').hidden=true;$('snapOk').disabled=false;$('snapInput').value=String(snaps.length+1).padStart(2,'0');
   snapDlg.showModal();$('snapInput').select();
 }
-function confirmSnapshot(){
+async function confirmSnapshot(){
   const n=$('snapInput').value.trim();
   if(!n){const e=$('snapErr');e.textContent=t('snapdlg.error');e.hidden=false;return}
-  const entry={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:n,created:Date.now(),status:JSON.parse(JSON.stringify(buildStatus()))}   // deep copy: ops keeps changing;
+  $('snapOk').disabled=true;                                   // compressing is asynchronous: ignore a second click
+  const entry={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:n,created:Date.now(),
+    ...await packSnapshot({operations:ops,preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase}})};   // packing copies the ops
   snaps.push(entry);
-  if(!saveSnaps()){snaps.pop();const e=$('snapErr');e.textContent=t('snapdlg.full');e.hidden=false;return}   // quota exceeded: nothing was changed
+  if(!saveSnaps()){snaps.pop();const e=$('snapErr');e.textContent=t('snapdlg.full');e.hidden=false;$('snapOk').disabled=false;return}   // quota exceeded: nothing was changed
   snapDlg.close();renderSnaps();msg(t('msg.snapSaved',{name:n}));
 }
 $('snapOk').onclick=confirmSnapshot;
 $('snapCancel').onclick=()=>snapDlg.close();
-$('snapInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmSnapshot()}});
-function restoreSnapshot(id){
+$('snapInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(!$('snapOk').disabled)confirmSnapshot()}});
+async function restoreSnapshot(id){
   const s=snaps.find(x=>x.id===id);if(!s)return;
   if(!confirm(t('confirm.snapRestore',{name:s.name})))return;
-  restoreStatus(s.status,t('msg.snapRestored',{name:s.name}));
+  try{
+    const d=await unpackSnapshot(s);
+    if(!bg0||!d||!Array.isArray(d.operations)||!d.operations.every(validOp))throw new Error('bad snapshot');
+    let W=bg0.width,H=bg0.height;
+    for(const o of d.operations){if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}else if(o.t==='scale'){W=o.w;H=o.h}}
+    if(W>MAXDIM||H>MAXDIM)throw new Error('too large');
+    cur=null;ops=d.operations;redoStack=[];discardPending();resetNames();replay();   // same background, new history
+    const p=d.preferences||{};
+    if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
+    if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
+    if(p.eraseWidth>=1&&p.eraseWidth<=80)widths.erase=(+p.eraseWidth);
+    syncWidth();markSw();savePrefs();persist();ui();fit();showSize();msg(t('msg.snapRestored',{name:s.name}));
+  }catch(e){msg(t('msg.badStatus'))}
 }
 function deleteSnapshot(id){
   const s=snaps.find(x=>x.id===id);if(!s)return;

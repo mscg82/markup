@@ -14,7 +14,7 @@ index.html (markup), css/style.css, js/markup.js (app logic), js/colorpicker.js 
 - Clear button: click = clear drawing, long press (700 ms) = also remove background; both use confirm() and are not undoable.
 - Export: merge background + layer at full resolution to JPEG.
 - localStorage keys: markup.bg (JPEG data URL), markup.ops (operations JSON), markup.prefs (color, draw width, erase width). Always wrap storage access in try/catch and warn the user if saving fails.
-- Offline: sw.js uses stale-while-revalidate. When a cached file is added, add it to ASSETS. Version rule: CACHE in sw.js (currently markup-v22) and APP_VERSION in js/markup.js (shown in the app's bottom-right corner) always change together, and only (1) in the first code change after the owner announces that a new development cycle has begun, or (2) when the owner explicitly asks for a bump. Never bump them at any other time.
+- Offline: sw.js uses stale-while-revalidate. When a cached file is added, add it to ASSETS. Version rule: CACHE in sw.js (currently markup-v23) and APP_VERSION in js/markup.js (shown in the app's bottom-right corner) always change together, and only (1) in the first code change after the owner announces that a new development cycle has begun, or (2) when the owner explicitly asks for a bump. Never bump them at any other time.
 - Icons: Firefox Android ignores SVG for shortcuts, so keep raster icons and favicon.ico declared before the SVG in <head>.
 
 ## Working style
@@ -28,4 +28,4 @@ fill option for shapes, remembering the selected tool, text tool, offline update
 ## Code conventions
 - When converting a value to a number with unary plus in an assignment, always write `a=(+b)`, never `a=+b`, so it is not mistaken for `+=`.
 
-- Snapshots: stored in localStorage `markup.snapshots` (array of {id,name,created,status}, status = same object as buildStatus()). Restore reuses restoreStatus() shared with Import status. resetSnapshots() is called wherever resetNames() is, except when restoring a snapshot (Import status from a file does clear them).
+- Snapshots: stored in localStorage `markup.snapshots` (array of {id,name,created,enc,data}; data = deflate+base64 of JSON {operations,preferences}, enc 'deflate', or plain JSON with enc 'json' when CompressionStream is missing). The background is NOT stored: it is always markup.bg, valid because every action that replaces the background calls resetSnapshots() (Open image, Empty image, Clear short/long, Import status). Restoring a snapshot only replaces ops/preferences and replays. Entries in older formats are dropped at load.
