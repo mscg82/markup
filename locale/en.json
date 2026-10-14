@@ -153,5 +153,9 @@
   "confirm.snapDelete": "Delete snapshot \"{name}\"?",
   "menu.snapList": "Existing snapshots",
   "menu.snapList.title": "List the saved snapshots to restore or delete them",
-  "width.valueLabel": "Line width in pixels (type a value from 1 to 80)"
+  "width.valueLabel": "Line width in pixels (type a value from 1 to 80)",
+  "menu.fullscreen": "Full screen",
+  "menu.exitFullscreen": "Exit full screen",
+  "menu.fullscreen.title": "Show the application in full screen, or leave it",
+  "msg.fullscreenFail": "Full screen is not available."
 }

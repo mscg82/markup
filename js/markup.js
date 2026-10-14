@@ -26,7 +26,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v24';   // keep in step with CACHE in sw.js
+const APP_VERSION='v25';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -915,6 +915,23 @@ function deleteSnapshot(id){
   $('miJpeg').onclick=()=>{close();commitPending();askFileName('jpeg')};
   $('miExport').onclick=()=>{close();commitPending();askFileName('status')};
   $('miImport').onclick=()=>{close();$('importFile').click()};
+  // Full screen (needs a tap; hidden when the browser has no Fullscreen API). The prefixed names cover old Chrome versions.
+  const de=document.documentElement,fsBtn=$('miFullscreen');
+  const fsReq=de.requestFullscreen||de.webkitRequestFullscreen;
+  const fsExit=document.exitFullscreen||document.webkitExitFullscreen;
+  const inFs=()=>!!(document.fullscreenElement||document.webkitFullscreenElement);
+  const fsLabel=()=>{fsBtn.textContent=t(inFs()?'menu.exitFullscreen':'menu.fullscreen')};
+  if(fsReq&&fsExit){
+    fsBtn.hidden=false;fsLabel();
+    document.addEventListener('fullscreenchange',fsLabel);document.addEventListener('webkitfullscreenchange',fsLabel);
+    fsBtn.onclick=()=>{
+      close();
+      try{
+        const p=inFs()?fsExit.call(document):fsReq.call(de);
+        if(p&&p.catch)p.catch(()=>msg(t('msg.fullscreenFail')));
+      }catch(e){msg(t('msg.fullscreenFail'))}
+    };
+  }
   $('miSettings').onclick=()=>{close();openSettings()};
   // Force-reload: drop the service worker and its cached files, then reload so everything is fetched
   // again from the server. The drawing and settings live in localStorage and are not touched.
