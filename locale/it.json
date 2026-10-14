@@ -136,5 +136,21 @@
   "toolbar.top.title": "Barra in alto – clic per spostarla a sinistra, tieni premuto per la modalità automatica",
   "toolbar.left.title": "Barra a sinistra – clic per spostarla in alto, tieni premuto per la modalità automatica",
   "toolbar.auto.title": "Posizione della barra: automatica (a sinistra in orizzontale, in alto in verticale) – clic per fissarla sul lato opposto",
-  "msg.toolbarAuto": "Posizione della barra: automatica."
+  "msg.toolbarAuto": "Posizione della barra: automatica.",
+  "menu.snapshots": "Snapshot",
+  "menu.snapNew": "Nuovo snapshot",
+  "menu.snapNew.title": "Salva il lavoro corrente come snapshot con nome in questo browser",
+  "snap.restore.title": "Ripristina \"{name}\" ({date})",
+  "snap.delete.title": "Elimina lo snapshot \"{name}\"",
+  "snapdlg.title": "Nuovo snapshot",
+  "snapdlg.name": "Nome dello snapshot",
+  "snapdlg.save": "Salva",
+  "snapdlg.error": "Inserisci un nome per lo snapshot.",
+  "snapdlg.full": "Spazio del browser insufficiente per salvare lo snapshot. Elimina alcuni snapshot e riprova.",
+  "msg.snapSaved": "Snapshot \"{name}\" salvato.",
+  "msg.snapRestored": "Snapshot \"{name}\" ripristinato.",
+  "confirm.snapRestore": "Ripristinare \"{name}\" sostituisce l'immagine e il disegno correnti. Continuare?",
+  "confirm.snapDelete": "Eliminare lo snapshot \"{name}\"?",
+  "menu.snapList": "Snapshot esistenti",
+  "menu.snapList.title": "Elenca gli snapshot salvati per ripristinarli o eliminarli"
 }

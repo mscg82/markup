@@ -35,6 +35,12 @@
         <hr role="separator">
         <button role="menuitem" id="miJpeg" disabled data-i18n="menu.saveJpeg" data-i18n-title="menu.saveJpeg.title"></button>
         <hr role="separator">
+        <button role="menuitem" id="miSnap" aria-haspopup="menu" aria-expanded="false"><span data-i18n="menu.snapshots"></span><span class="chev" aria-hidden="true">▸</span></button>
+        <div id="subSnap" class="sub" role="menu" hidden>
+          <button role="menuitem" id="miSnapNew" disabled data-i18n="menu.snapNew" data-i18n-title="menu.snapNew.title"></button>
+          <button role="menuitem" id="miSnapList" disabled aria-haspopup="menu" aria-expanded="false" data-i18n="menu.snapList" data-i18n-title="menu.snapList.title"></button>
+        </div>
+        <hr role="separator">
         <button role="menuitem" id="miExport" disabled data-i18n="menu.exportStatus" data-i18n-title="menu.exportStatus.title"></button>
         <button role="menuitem" id="miImport" data-i18n="menu.importStatus" data-i18n-title="menu.importStatus.title"></button>
         <hr role="separator">
@@ -42,6 +48,7 @@
         <hr role="separator">
         <button role="menuitem" id="miReload" data-i18n="menu.reload" data-i18n-title="menu.reload.title"></button>
       </div>
+      <div id="snapPop" role="menu" data-i18n-aria-label="menu.snapList" hidden></div>
       <input id="file" type="file" accept="image/*" hidden>
       <input id="importFile" type="file" accept="application/json,.json" hidden>
     </div>
@@ -158,6 +165,13 @@
   <div class="name-row"><input id="nameInput" type="text" maxlength="100" spellcheck="false" autocomplete="off"><span id="nameExt" class="dlg-ext"></span></div>
   <p id="nameErr" class="dlg-err" hidden></p>
   <div class="dlg-actions"><button id="nameCancel" type="button" data-i18n="common.cancel"></button><button id="nameOk" type="button" class="primary"></button></div>
+</dialog>
+<dialog id="snapDlg" aria-labelledby="snapTitle">
+  <h2 id="snapTitle" tabindex="-1" data-i18n="snapdlg.title"></h2>
+  <label class="dlg-label" for="snapInput" data-i18n="snapdlg.name"></label>
+  <input id="snapInput" type="text" maxlength="60" spellcheck="false" autocomplete="off">
+  <p id="snapErr" class="dlg-err" hidden></p>
+  <div class="dlg-actions"><button id="snapCancel" type="button" data-i18n="common.cancel"></button><button id="snapOk" type="button" class="primary" data-i18n="snapdlg.save"></button></div>
 </dialog>
 <dialog id="settingsDlg" aria-labelledby="setTitle">
   <h2 id="setTitle" data-i18n="settings.title"></h2>

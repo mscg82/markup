@@ -53,9 +53,9 @@ canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;displa
 #menuList hr{border:0;border-top:1px solid var(--line);margin:4px 2px;width:auto}
 #menuList .sub{display:flex;flex-direction:column;gap:2px;padding-left:16px}
 #menuList .sub[hidden]{display:none}
-#miNew,#miResize{display:flex;justify-content:space-between;align-items:center;gap:16px}
+#miNew,#miResize,#miSnap{display:flex;justify-content:space-between;align-items:center;gap:16px}
 .chev{display:inline-block;transition:transform .15s}
-#miNew[aria-expanded=true] .chev,#miResize[aria-expanded=true] .chev{transform:rotate(90deg)}
+#miNew[aria-expanded=true] .chev,#miResize[aria-expanded=true] .chev,#miSnap[aria-expanded=true] .chev{transform:rotate(90deg)}
 
 /* new-image dialog */
 dialog{background:var(--bar);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:16px;width:min(92vw,340px);max-height:90vh;overflow:auto}
@@ -175,3 +175,14 @@ html.tb-left #mainMenu{justify-self:start}
 html.tb-left #mainMenu>button{width:auto}
 /* popups open to the right of the toolbar, in viewport coordinates (js/markup.js: placePopup) */
 html.tb-left #menuList,html.tb-left #shapesList,html.tb-left #widthPop{position:fixed;right:auto;max-height:calc(100vh - 12px);overflow-y:auto}
+
+/* snapshots submenu */
+#snapPop{position:fixed;z-index:30;min-width:170px;max-width:calc(100vw - 12px);box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;background:var(--bar);border:1px solid var(--line);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+#snapPop[hidden]{display:none}
+#snapPop button{background:transparent;border:0;text-align:left}
+#snapPop button:hover,#snapPop button:focus-visible{background:#445057}
+.snap-row{display:flex;align-items:stretch;gap:2px}
+#snapPop .snap-name{width:auto;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#snapPop .snap-del{flex:none;width:36px;min-height:0;display:flex;align-items:center;justify-content:center;padding:0}
+.snap-del svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#snapInput{width:100%;box-sizing:border-box}

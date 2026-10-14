@@ -1,5 +1,5 @@
 // Bump CACHE when you deploy a new version so clients drop old files.
-const CACHE = 'markup-v21';
+const CACHE = 'markup-v22';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './css/style.css', './js/markup.js', './js/colorpicker.js', './js/i18n.js',
@@ -29,7 +29,8 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     caches.open(CACHE).then(async cache => {
       const cached = await cache.match(req, { ignoreSearch: true });
-      const network = fetch(req).then(res => {
+      // 'no-cache' makes the background refresh revalidate with the server instead of trusting the browser's HTTP cache
+      const network = fetch(req, { cache: 'no-cache' }).then(res => {
         if (res && res.ok) cache.put(req, res.clone());
         return res;
       }).catch(() => null);

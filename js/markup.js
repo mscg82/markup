@@ -26,7 +26,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v21';   // keep in step with CACHE in sw.js
+const APP_VERSION='v22';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -505,7 +505,7 @@ cv.addEventListener('wheel',e=>{
 /* ---------- UI ---------- */
 function ui(){
   showSize();
-  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miResize').disabled=!bg;$('miExport').disabled=!bg;$('clear').disabled=!bg;
+  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miResize').disabled=!bg;$('miExport').disabled=!bg;$('miSnapNew').disabled=!bg;$('clear').disabled=!bg;
   $('hint').style.display=bg?'none':'flex';
 }
 // The last drawing tool used before the eraser (not Move, not the eraser itself). Choosing a color while the
@@ -563,7 +563,7 @@ function clearWork(all){
   if(!confirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
   const baked=!all&&ops.some(isResizeOp);   // clearing the drawing keeps the (enlarged) background
   if(baked)bg0=bg;
-  cur=null;ops=[];redoStack=[];discardPending();resetNames();
+  cur=null;ops=[];redoStack=[];discardPending();resetNames();resetSnapshots();
   if(all){
     bg=bg0=L=lc=null;
     try{localStorage.removeItem('markup.bg');localStorage.removeItem('markup.ops')}catch(e){}
@@ -618,7 +618,7 @@ $('file').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
   if((ops.length||pending)&&!confirm(t('confirm.openImage')))return;
   const url=URL.createObjectURL(f),img=new Image();
-  img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];discardPending();resetNames();persist(true);ui();fit()};
+  img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];discardPending();resetNames();resetSnapshots();persist(true);ui();fit()};
   img.onerror=()=>msg(t('msg.badImage'));
   img.src=url;
 };
@@ -653,14 +653,16 @@ function saveJpeg(name){
   const x=c.getContext('2d');x.drawImage(bg,0,0);x.drawImage(L,0,0);
   c.toBlob(b=>download(b,name),'image/jpeg',.92);
 }
-function exportStatus(name){
-  const st={
+function buildStatus(){   // the application status; shared by Export status and Snapshots
+  return{
     format:'markup-status',version:1,exportedAt:new Date().toISOString(),
     background:bg0.toDataURL('image/jpeg',.88),   // the original background; the frames are in the operations
     operations:ops,
     preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase}
   };
-  download(new Blob([JSON.stringify(st)],{type:'application/json'}),name);
+}
+function exportStatus(name){
+  download(new Blob([JSON.stringify(buildStatus())],{type:'application/json'}),name);
 }
 const num=v=>typeof v==='number'&&isFinite(v);
 const pt=p=>Array.isArray(p)&&p.length===2&&num(p[0])&&num(p[1]);
@@ -673,48 +675,144 @@ function validOp(o){
   if(o.t==='line'||o.t==='arrow'||o.t==='rect'||o.t==='circle'||o.t==='star')return pt(o.a)&&pt(o.b);
   return false;
 }
+function validStatus(st){
+  return!!st&&st.format==='markup-status'&&typeof st.background==='string'&&st.background.startsWith('data:image/')&&Array.isArray(st.operations)&&st.operations.every(validOp);
+}
+// Replace the current work with a status object (from a file or a snapshot). The caller has validated it
+// and asked for confirmation. Snapshots are left alone.
+function restoreStatus(st,okMsg){
+  const img=new Image();
+  img.onload=()=>{
+    const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));let W=Math.round(img.width*k),H=Math.round(img.height*k);
+    for(const o of st.operations){if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}else if(o.t==='scale'){W=o.w;H=o.h}}
+    if(W>MAXDIM||H>MAXDIM){msg(t('msg.badStatus'));return}   // the frames would make the image too large
+    setBackground(img);cur=null;ops=JSON.parse(JSON.stringify(st.operations));redoStack=[];discardPending();resetNames();replay();   // copy: a snapshot must never change
+    const p=st.preferences||{};
+    if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
+    if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
+    if(p.eraseWidth>=1&&p.eraseWidth<=80)widths.erase=(+p.eraseWidth);
+    syncWidth();markSw();savePrefs();persist(true);ui();fit();msg(okMsg);
+  };
+  img.onerror=()=>msg(t('msg.badBackground'));
+  img.src=st.background;
+}
 function importStatus(file){
   const fr=new FileReader();
   fr.onerror=()=>msg(t('msg.fileRead'));
   fr.onload=()=>{
     let st;
     try{st=JSON.parse(fr.result)}catch(e){msg(t('msg.badJson'));return}
-    if(!st||st.format!=='markup-status'||typeof st.background!=='string'||!st.background.startsWith('data:image/')||!Array.isArray(st.operations)||!st.operations.every(validOp)){
-      msg(t('msg.badStatus'));return;
-    }
+    if(!validStatus(st)){msg(t('msg.badStatus'));return}
     if(bg&&!confirm(t('confirm.import')))return;
-    const img=new Image();
-    img.onload=()=>{
-      const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));let W=Math.round(img.width*k),H=Math.round(img.height*k);
-      for(const o of st.operations){if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}else if(o.t==='scale'){W=o.w;H=o.h}}
-      if(W>MAXDIM||H>MAXDIM){msg(t('msg.badStatus'));return}   // the frames would make the image too large
-      setBackground(img);cur=null;ops=st.operations;redoStack=[];discardPending();resetNames();replay();
-      const p=st.preferences||{};
-      if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
-      if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
-      if(p.eraseWidth>=1&&p.eraseWidth<=80)widths.erase=(+p.eraseWidth);
-      syncWidth();markSw();savePrefs();persist(true);ui();fit();msg(t('msg.imported'));
-    };
-    img.onerror=()=>msg(t('msg.badBackground'));
-    img.src=st.background;
+    restoreStatus(st,t('msg.imported'));
   };
   fr.readAsText(file);
+}
+
+/* ---------- snapshots ---------- */
+// Named copies of the full status (same content as Export status), kept in localStorage, newest first.
+// They are not part of the exported JSON, and are dropped when the canvas is replaced or cleared.
+const SNAP_KEY='markup.snapshots';
+let snaps=[];
+try{const a=JSON.parse(localStorage.getItem(SNAP_KEY)||'[]');if(Array.isArray(a))snaps=a.filter(x=>x&&typeof x.name==='string'&&num(x.created)&&validStatus(x.status))}catch(e){snaps=[]}
+function saveSnaps(){
+  try{if(snaps.length)localStorage.setItem(SNAP_KEY,JSON.stringify(snaps));else localStorage.removeItem(SNAP_KEY);return true}
+  catch(e){return false}
+}
+function resetSnapshots(){snaps=[];try{localStorage.removeItem(SNAP_KEY)}catch(e){}renderSnaps()}
+let renderSnaps=()=>{};   // replaced by the menu code below
+const snapDlg=$('snapDlg');
+function openSnapDialog(){
+  $('snapErr').hidden=true;$('snapInput').value=String(snaps.length+1).padStart(2,'0');
+  snapDlg.showModal();$('snapInput').select();
+}
+function confirmSnapshot(){
+  const n=$('snapInput').value.trim();
+  if(!n){const e=$('snapErr');e.textContent=t('snapdlg.error');e.hidden=false;return}
+  const entry={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:n,created:Date.now(),status:JSON.parse(JSON.stringify(buildStatus()))}   // deep copy: ops keeps changing;
+  snaps.push(entry);
+  if(!saveSnaps()){snaps.pop();const e=$('snapErr');e.textContent=t('snapdlg.full');e.hidden=false;return}   // quota exceeded: nothing was changed
+  snapDlg.close();renderSnaps();msg(t('msg.snapSaved',{name:n}));
+}
+$('snapOk').onclick=confirmSnapshot;
+$('snapCancel').onclick=()=>snapDlg.close();
+$('snapInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmSnapshot()}});
+function restoreSnapshot(id){
+  const s=snaps.find(x=>x.id===id);if(!s)return;
+  if(!confirm(t('confirm.snapRestore',{name:s.name})))return;
+  restoreStatus(s.status,t('msg.snapRestored',{name:s.name}));
+}
+function deleteSnapshot(id){
+  const s=snaps.find(x=>x.id===id);if(!s)return;
+  if(!confirm(t('confirm.snapDelete',{name:s.name})))return;
+  snaps=snaps.filter(x=>x!==s);saveSnaps();renderSnaps();
 }
 
 /* ---------- main menu ---------- */
 (()=>{
   const btn=$('menuBtn'),list=$('menuList');
-  const subs=[{mi:$('miNew'),sub:$('subNew')},{mi:$('miResize'),sub:$('subResize')}];   // submenus: the parent entry and its list
+  const subs=[{mi:$('miNew'),sub:$('subNew')},{mi:$('miResize'),sub:$('subResize')},{mi:$('miSnap'),sub:$('subSnap')}];   // submenus: the parent entry and its list
   const items=()=>[...list.querySelectorAll('button:not(:disabled)')].filter(b=>b.offsetParent!==null);
   function toggleSub(sb,show){
     for(const x of subs){const v=x===sb&&show;x.sub.hidden=!v;x.mi.setAttribute('aria-expanded',String(v))}   // one at a time
+    closeSnapPop();
     if(!list.hidden)placePopup(list,btn);     // the menu got taller or shorter
   }
+  // The existing snapshots are listed in their own popup next to the "Existing snapshots" entry.
+  // It never exceeds the visible area; longer lists scroll.
+  const pop=$('snapPop'),miList=$('miSnapList');
+  function placeSnapPop(){
+    const vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight,m=6;
+    pop.style.maxHeight=(vh-2*m)+'px';pop.style.left='0px';pop.style.top='0px';
+    const e=miList.getBoundingClientRect(),w=pop.offsetWidth,h=pop.offsetHeight;
+    let x=e.right+4;if(x+w>vw-m)x=e.left-4-w;      // right of the entry, else left of it, else just kept on screen
+    pop.style.left=Math.min(Math.max(m,x),Math.max(m,vw-w-m))+'px';
+    pop.style.top=Math.min(Math.max(m,e.top),Math.max(m,vh-h-m))+'px';
+  }
+  function openSnapPop(){
+    if(!snaps.length)return;
+    pop.hidden=false;miList.setAttribute('aria-expanded','true');placeSnapPop();
+    pop.querySelector('button')?.focus();
+  }
+  function closeSnapPop(focusEntry){
+    pop.hidden=true;miList.setAttribute('aria-expanded','false');
+    if(focusEntry&&!list.hidden)miList.focus();
+  }
+  renderSnaps=()=>{
+    pop.textContent='';
+    const sorted=snaps.slice().sort((a,b)=>b.created-a.created);
+    miList.disabled=!sorted.length;
+    if(!sorted.length&&!pop.hidden)closeSnapPop(true);
+    for(const s of sorted){
+      const row=document.createElement('div');row.className='snap-row';row.setAttribute('role','none');
+      const nb=document.createElement('button');nb.type='button';nb.setAttribute('role','menuitem');nb.className='snap-name';
+      nb.textContent=s.name;nb.title=t('snap.restore.title',{name:s.name,date:new Date(s.created).toLocaleString(i18n.lang)});
+      nb.onclick=()=>{close();restoreSnapshot(s.id)};
+      const del=document.createElement('button');del.type='button';del.setAttribute('role','menuitem');del.className='snap-del';
+      del.title=t('snap.delete.title',{name:s.name});del.setAttribute('aria-label',t('snap.delete.title',{name:s.name}));
+      del.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+      del.onclick=()=>{deleteSnapshot(s.id)};
+      row.append(nb,del);pop.appendChild(row);
+    }
+    if(!pop.hidden)placeSnapPop();
+  };
+  renderSnaps();
+  miList.onclick=()=>pop.hidden?openSnapPop():closeSnapPop();
+  pop.addEventListener('keydown',e=>{
+    const it=[...pop.querySelectorAll('button')],i=it.indexOf(document.activeElement);
+    if(e.key==='Escape'||e.key==='ArrowLeft')closeSnapPop(true);
+    else if(e.key==='ArrowDown')it[(i+1)%it.length]?.focus();
+    else if(e.key==='ArrowUp')it[(i-1+it.length)%it.length]?.focus();
+    else if(e.key==='ArrowRight'&&document.activeElement.classList.contains('snap-name'))pop.querySelectorAll('.snap-del')[Math.floor(i/2)]?.focus();
+    else return;
+    e.preventDefault();e.stopPropagation();
+  });
+  addEventListener('resize',()=>{if(!pop.hidden)placeSnapPop()});
   function open(){
     toggleSub(null,false);list.hidden=false;placePopup(list,btn);
     btn.setAttribute('aria-expanded','true');
   }
-  function close(focusBtn){list.hidden=true;btn.setAttribute('aria-expanded','false');if(focusBtn)btn.focus()}
+  function close(focusBtn){closeSnapPop();list.hidden=true;btn.setAttribute('aria-expanded','false');if(focusBtn)btn.focus()}
   btn.onclick=()=>{list.hidden?(open(),items()[0]?.focus()):close()};
   addEventListener('pointerdown',e=>{if(!list.hidden&&!$('mainMenu').contains(e.target))close()});
   list.addEventListener('keydown',e=>{
@@ -733,6 +831,7 @@ function importStatus(file){
   $('miScale').onclick=()=>{close();openScaleDialog()};
   $('miOpen').onclick=()=>{close();$('file').click()};
   $('miEmpty').onclick=()=>{close();openNewDialog()};
+  $('miSnapNew').onclick=()=>{close();commitPending();openSnapDialog()};
   $('miJpeg').onclick=()=>{close();commitPending();askFileName('jpeg')};
   $('miExport').onclick=()=>{close();commitPending();askFileName('status')};
   $('miImport').onclick=()=>{close();$('importFile').click()};
@@ -746,6 +845,15 @@ function importStatus(file){
     try{
       if('serviceWorker' in navigator)await Promise.all((await navigator.serviceWorker.getRegistrations()).map(r=>r.unregister()));
       if(window.caches)await Promise.all((await caches.keys()).map(k=>caches.delete(k)));
+    }catch(e){}
+    // The browser's own HTTP cache can still hold old copies (translations included): fetch every file
+    // listed in sw.js again, bypassing it, so that the reloaded page gets the server's current versions.
+    try{
+      const sw=await(await fetch('sw.js',{cache:'reload'})).text();
+      const list=/ASSETS\s*=\s*\[([\s\S]*?)\]/.exec(sw);
+      const urls=list?[...list[1].matchAll(/'([^']+)'/g)].map(x=>x[1]):[];
+      for(const l of(i18n.lang?[i18n.lang]:[]))urls.push('./locale/'+l+'.json');
+      await Promise.all([...new Set(urls)].map(u=>fetch(u,{cache:'reload'}).catch(()=>{})));
     }catch(e){}
     location.reload();
   };
@@ -898,7 +1006,7 @@ function createEmptyImage(){
   if((ops.length||pending)&&!confirm(t('confirm.newImage')))return;
   const c=document.createElement('canvas');c.width=w;c.height=h;
   const x=c.getContext('2d');x.fillStyle=$('newColor').value;x.fillRect(0,0,w,h);
-  setBackground(c);cur=null;ops=[];redoStack=[];discardPending();resetNames();persist(true);ui();fit();newDlg.close();
+  setBackground(c);cur=null;ops=[];redoStack=[];discardPending();resetNames();resetSnapshots();persist(true);ui();fit();newDlg.close();
 }
 $('newOk').onclick=createEmptyImage;
 $('newCancel').onclick=()=>newDlg.close();
