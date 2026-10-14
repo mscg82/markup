@@ -17,9 +17,9 @@
   "menu.importStatus": "Importa stato",
   "menu.importStatus.title": "Ripristina lo stato dell'applicazione da un file JSON",
   "undo.label": "Annulla",
-  "undo.title": "Annulla (Ctrl+Z)",
+  "undo.title": "Annulla (Ctrl+Z). Tieni premuto: annulla tutto",
   "redo.label": "Ripeti",
-  "redo.title": "Ripeti (Ctrl+Maiusc+Z o Ctrl+Y)",
+  "redo.title": "Ripeti (Ctrl+Maiusc+Z o Ctrl+Y). Tieni premuto: ripeti tutto",
   "clear.label": "Cancella",
   "clear.title": "Clic: cancella il disegno. Tieni premuto: rimuove anche l'immagine.",
   "tools.label": "Strumenti",
@@ -152,5 +152,6 @@
   "confirm.snapRestore": "Ripristinare \"{name}\" sostituisce l'immagine e il disegno correnti. Continuare?",
   "confirm.snapDelete": "Eliminare lo snapshot \"{name}\"?",
   "menu.snapList": "Snapshot esistenti",
-  "menu.snapList.title": "Elenca gli snapshot salvati per ripristinarli o eliminarli"
+  "menu.snapList.title": "Elenca gli snapshot salvati per ripristinarli o eliminarli",
+  "width.valueLabel": "Spessore della linea in pixel (digita un valore da 1 a 80)"
 }

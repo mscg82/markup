@@ -26,7 +26,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v23';   // keep in step with CACHE in sw.js
+const APP_VERSION='v24';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -532,7 +532,8 @@ document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
 function syncWidth(){
   const v=tool==='erase'?widths.erase:widths.draw;
   $('width').value=v;$('widthL').value=v;                       // inline slider and popup slider
-  $('wv').textContent=v;$('wvPop').textContent=v;$('wvBtn').textContent=v;
+  for(const el of[$('wv'),$('wvPop')])if(document.activeElement!==el){el.value=v;el.classList.remove('bad');el.removeAttribute('aria-invalid')}   // a box being edited keeps what is typed
+  $('wvBtn').textContent=v;
 }
 function setWidth(v){widths[tool==='erase'?'erase':'draw']=v;if(tool==='erase')render();if(pending&&tool!=='erase'){pending.w=v;render()}syncWidth();savePrefs()}
 const PK='markup.prefs';
@@ -557,6 +558,29 @@ function markSw(){const v=$('color').value.toLowerCase();picker.set(v);sw.queryS
 const picker=createColorPicker({mount:$('cp'),input:$('color'),palette:PALETTE,onChange:(c,final)=>{leaveEraser();markSw();if(pending){pending.c=c;render()}if(final)savePrefs()}});
 markSw();
 $('width').oninput=e=>setWidth((+e.target.value));
+// Typed width: valid whole numbers move the slider at once; invalid ones are flagged and, when the box loses focus
+// (or Enter is pressed), a number out of range is clamped to the nearest limit and anything else reverts.
+for(const el of[$('wv'),$('wvPop')]){
+  const lo=(+$('width').min),hi=(+$('width').max);
+  const inRange=s=>/^\d{1,3}$/.test(s)&&Number(s)>=lo&&Number(s)<=hi;
+  const flag=bad=>{el.classList.toggle('bad',bad);if(bad)el.setAttribute('aria-invalid','true');else el.removeAttribute('aria-invalid')};
+  el.addEventListener('focus',()=>el.select());
+  el.addEventListener('input',()=>{
+    const s=el.value.trim();
+    if(inRange(s)){flag(false);setWidth(Number(s))}
+    else flag(s!=='');
+  });
+  const commit=()=>{
+    const s=el.value.trim();
+    if(/^\d+$/.test(s))setWidth(Math.min(hi,Math.max(lo,Number(s))));   // out of range: nearest limit
+    flag(false);syncWidth();                                              // empty or not a number: back to the current width
+  };
+  el.addEventListener('blur',commit);
+  el.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();el.blur()}
+    else if(e.key==='Escape'){e.preventDefault();el.value='';el.blur()}    // revert
+  });
+}
 $('widthL').oninput=e=>setWidth((+e.target.value));
 function clearWork(all){
   if(!all&&!ops.length&&!pending){msg(t('msg.nothingToClear'));return}
@@ -587,6 +611,22 @@ function clearWork(all){
 })();
 $('undo').onclick=()=>{commitPending();if(!ops.length)return;const o=ops.pop();redoStack.push(o);replay();persist();ui();if(isResizeOp(o))fit();else render()};
 $('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);if(isResizeOp(o)){applyResizeOp(o);persist();ui();fit()}else{drawOp(lc,o);persist();ui();render()}};
+// Long press: jump to the very first (Undo) or the very last (Redo) step of the history.
+function undoAll(){commitPending();if(!ops.length)return;redoStack.push(...ops.reverse());ops=[];replay();persist();ui();fit()}   // reversed, so Redo gives the steps back in order
+function redoAll(){commitPending();if(!redoStack.length)return;ops.push(...redoStack.reverse());redoStack=[];replay();persist();ui();fit()}
+function longPress(b,action,ms=600){
+  let timer=null,fired=false;
+  const stop=()=>{b.classList.remove('holding');clearTimeout(timer);timer=null};
+  b.addEventListener('pointerdown',e=>{
+    if(b.disabled||e.button>0)return;
+    fired=false;b.classList.add('holding');
+    timer=setTimeout(()=>{timer=null;fired=true;b.classList.remove('holding');action()},ms);
+  });
+  b.addEventListener('pointerup',()=>{stop();setTimeout(()=>{fired=false},60)});b.addEventListener('pointerleave',stop);b.addEventListener('pointercancel',stop);
+  b.addEventListener('contextmenu',e=>e.preventDefault());
+  b.addEventListener('click',e=>{if(fired){fired=false;e.stopImmediatePropagation()}},true);   // the click that ends a long press is not a short press
+}
+longPress($('undo'),undoAll);longPress($('redo'),redoAll);
 $('zi').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(1.25,r.width/2,r.height/2)};
 $('zo').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(.8,r.width/2,r.height/2)};
 $('fit').onclick=fit;
@@ -594,7 +634,7 @@ let spaceDown=false;
 function setCursor(){cv.style.cursor=panning?'grabbing':tmp?'ns-resize':(tool==='pan'||spaceDown)?'grab':'crosshair'}
 addEventListener('keydown',e=>{
   if(e.target.closest&&e.target.closest('dialog'))return;   // let dialogs handle their own keys
-  if(e.ctrlKey||e.metaKey){
+  if((e.ctrlKey||e.metaKey)&&!(e.target.tagName==='INPUT'&&e.target.type==='text')){   // in a text box Ctrl+Z edits the text
     const k=e.key.toLowerCase();
     if(k==='z'&&!e.shiftKey){e.preventDefault();$('undo').click();return}
     if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();$('redo').click();return}

@@ -17,9 +17,9 @@
   "menu.importStatus": "Import status",
   "menu.importStatus.title": "Restore the application status from a JSON file",
   "undo.label": "Undo",
-  "undo.title": "Undo (Ctrl+Z)",
+  "undo.title": "Undo (Ctrl+Z). Hold: undo everything",
   "redo.label": "Redo",
-  "redo.title": "Redo (Ctrl+Shift+Z or Ctrl+Y)",
+  "redo.title": "Redo (Ctrl+Shift+Z or Ctrl+Y). Hold: redo everything",
   "clear.label": "Clear",
   "clear.title": "Click: clear drawing. Hold: also remove the image.",
   "tools.label": "Tools",
@@ -152,5 +152,6 @@
   "confirm.snapRestore": "Restoring \"{name}\" replaces the current image and drawing. Continue?",
   "confirm.snapDelete": "Delete snapshot \"{name}\"?",
   "menu.snapList": "Existing snapshots",
-  "menu.snapList.title": "List the saved snapshots to restore or delete them"
+  "menu.snapList.title": "List the saved snapshots to restore or delete them",
+  "width.valueLabel": "Line width in pixels (type a value from 1 to 80)"
 }
