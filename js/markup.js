@@ -219,6 +219,13 @@ function render(){
   ctx.drawImage(bg,0,0);ctx.drawImage(L,0,0);
   if(cur&&!(cur.t==='pen'||cur.t==='erase'))drawOp(ctx,cur);
   if(pending)drawOp(ctx,pending);
+  if(eraserPt&&tool==='erase'&&ptrs.size<2&&!tmp&&!panning&&!spaceDown){   // eraser footprint: what a touch here would clean
+    const rr=widths.erase/2*s*d;
+    ctx.setTransform(1,0,0,1,0,0);ctx.beginPath();ctx.arc(eraserPt[0]*d,eraserPt[1]*d,rr,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.35)';ctx.fill();
+    ctx.lineWidth=d*2;ctx.strokeStyle='rgba(255,255,255,.9)';ctx.stroke();
+    ctx.lineWidth=d;ctx.strokeStyle='rgba(0,0,0,.65)';ctx.stroke();
+  }
   ctx.setTransform(d*s,0,0,d*s,d*ox,d*oy);
   ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=1/s;ctx.strokeRect(0,0,bg.width,bg.height);
   positionMove();
@@ -242,6 +249,8 @@ const local=e=>{const r=cv.getBoundingClientRect();return[e.clientX-r.left,e.cli
 // A quick tap is also a normal action (a pen dot, a fill...), so when the gesture is recognized the effects of
 // the preceding taps are removed from the history again.
 const TAP_MAX_DUR=250,TAP_GAP=350,TAP_DIST=24,TAP_SLOP=8,ZOOM_SENS=150;   // ms, ms, px, px, px per e-fold
+let eraserPt=null;                                  // pointer position (view pixels) for the eraser footprint
+let eraserRaf=0;
 let tmp=null;                                       // active temporary mode: {id,mode,t0,x,y,moved,ly,ax,ay}
 let tapSeq={n:0,tEnd:0,x:0,y:0,type:'',tracked:[]}; // consecutive quick taps so far
 let press=null;                                     // the single press being watched to see if it is a quick tap
@@ -290,12 +299,17 @@ cv.addEventListener('pointerdown',e=>{
   if(tool==='pan'||spaceDown||e.button===1||e.button===2){panning=true;last=local(e);setCursor();return}
   if(tool==='fill'){fillTap={id:e.pointerId,p:toImg(e),sx:e.clientX,sy:e.clientY,c:$('color').value};return}   // applied on release
   if(pending){tapTrack={id:e.pointerId,sx:e.clientX,sy:e.clientY,p0:toImg(e)};return}   // a tap places the pending shape; a drag places it and starts a new one
+  if(tool==='erase')eraserPt=local(e);
   const p=toImg(e),w=tool==='erase'?widths.erase:widths.draw,c=$('color').value;
   if(tool==='pen'||tool==='erase'){cur={t:tool,c,w,p:[p]};drawOp(lc,cur);}
   else cur={t:tool,c,w,a:p,b:p};
   render();
 });
 cv.addEventListener('pointermove',e=>{
+  if(tool==='erase'&&bg){
+    eraserPt=local(e);
+    if(!ptrs.has(e.pointerId)&&!eraserRaf)eraserRaf=requestAnimationFrame(()=>{eraserRaf=0;render()});   // mouse hover: redraw once per frame
+  }
   if(!ptrs.has(e.pointerId))return;
   ptrs.set(e.pointerId,local(e));
   if(ptrs.size===2&&pinch){updatePinch();return}
@@ -332,6 +346,7 @@ function end(e){
   if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
   if(ptrs.size<2)pinch=null;
   const now=performance.now();
+  if(e.pointerType!=='mouse'&&eraserPt){eraserPt=null;render()}   // a finger left the screen: no footprint any more
   if(tmp&&tmp.id===e.pointerId){                   // end of a temporary zoom / move press
     const quick=e.type==='pointerup'&&!tmp.moved&&now-tmp.t0<=TAP_MAX_DUR,mode=tmp.mode;
     endTemp();
@@ -361,6 +376,7 @@ function end(e){
   }
   if(ptrs.size===0){panning=false;setCursor()}
 }
+cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&eraserPt&&!ptrs.size){eraserPt=null;render()}});
 cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
 function cancelCur(){if(cur){cur=null;replay();render()}}
 
@@ -511,14 +527,14 @@ document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
     $('shapesIcon').innerHTML=b.querySelector('svg').outerHTML;
     $('shapesList').hidden=true;$('shapesBtn').setAttribute('aria-expanded','false');
   }
-  syncWidth();setCursor();
+  eraserPt=null;syncWidth();setCursor();render();   // render: the eraser outline disappears when another tool is chosen
 });
 function syncWidth(){
   const v=tool==='erase'?widths.erase:widths.draw;
   $('width').value=v;$('widthL').value=v;                       // inline slider and popup slider
   $('wv').textContent=v;$('wvPop').textContent=v;$('wvBtn').textContent=v;
 }
-function setWidth(v){widths[tool==='erase'?'erase':'draw']=v;if(pending&&tool!=='erase'){pending.w=v;render()}syncWidth();savePrefs()}
+function setWidth(v){widths[tool==='erase'?'erase':'draw']=v;if(tool==='erase')render();if(pending&&tool!=='erase'){pending.w=v;render()}syncWidth();savePrefs()}
 const PK='markup.prefs';
 function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,draw:widths.draw,erase:widths.erase}))}catch(e){}}
 try{
