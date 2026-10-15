@@ -32,7 +32,7 @@ $('ver').textContent=t('app.version',{version:APP_VERSION});
 /* ---------- settings (persisted in localStorage) ---------- */
 const SETTINGS_KEY='markup.settings';
 const validSize=v=>Number.isInteger(v)&&v>=16&&v<=MAXDIM;
-let settings={lang:'auto',newW:1600,newH:1200,diag:false};
+let settings={lang:'auto',newW:1600,newH:1200,diag:false,palm:false,palmMs:250};
 try{
   const p=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'null');
   if(p){
@@ -40,8 +40,38 @@ try{
     if(validSize(p.newW))settings.newW=p.newW;
     if(validSize(p.newH))settings.newH=p.newH;
     if(typeof p.diag==='boolean')settings.diag=p.diag;
+    if(typeof p.palm==='boolean')settings.palm=p.palm;
+    if(Number.isInteger(p.palmMs)&&p.palmMs>=0&&p.palmMs<=1000)settings.palmMs=p.palmMs;
   }
 }catch(e){}
+/* ---------- palm rejection (opt-in) ----------
+   Off by default: every hook below is a single test of the boolean palmOn, nothing else runs.
+   Rules are relative (no pixel thresholds): a second touch must land soon after the first (pinch),
+   a much smaller late touch means the first was a palm, and a much bigger touch right after one ends is a palm. */
+let palmOn=settings.palm;
+const palmInfo=new Map(),palmRej=new Set();let palmLast=null;   // accepted id -> {t,sz}; rejected ids; last ended contact
+const PALM_SMALLER=0.6,PALM_BIGGER=1.8,PALM_AFTER=1000;
+function palmReset(){palmInfo.clear();palmRej.clear();palmLast=null}
+function palmDown(e){                                // true = ignore this contact
+  if(e.pointerType!=='touch')return false;
+  const sz=Math.max(e.width,e.height),now=e.timeStamp;
+  if(ptrs.size===0){
+    if(palmLast&&now-palmLast.t<=PALM_AFTER&&sz>PALM_BIGGER*palmLast.sz){palmRej.add(e.pointerId);return true}
+  }else if(palmMs()>0){
+    let first=null;for(const id of ptrs.keys()){first=id;break}
+    const f=palmInfo.get(first);
+    if(ptrs.size>=2||!f||now-f.t>palmMs()){
+      if(ptrs.size===1&&f&&sz<PALM_SMALLER*f.sz){     // the contact already down was the palm: drop it, keep this one
+        palmRej.add(first);palmInfo.delete(first);ptrs.delete(first);
+        fillTap=null;tapTrack=null;press=null;tapSeq.n=0;endTemp();cancelCur();pinch=null;panning=false;
+      }else{palmRej.add(e.pointerId);return true}
+    }
+  }
+  if(palmRej.size>32)palmRej.clear();
+  palmInfo.set(e.pointerId,{t:now,sz});return false;
+}
+function palmUp(e){const f=palmInfo.get(e.pointerId);palmInfo.delete(e.pointerId);if(f)palmLast={t:e.timeStamp,sz:f.sz}}
+function palmMs(){return settings.palmMs}
 function saveSettings(){
   try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings))}catch(e){msg(t('msg.storageFull'))}
 }
@@ -286,7 +316,9 @@ function endTemp(){
 
 /* ---------- pointer handling ---------- */
 cv.addEventListener('pointerdown',e=>{
-  if(!bg)return;cv.setPointerCapture(e.pointerId);
+  if(!bg)return;
+  if(palmOn&&palmDown(e))return;
+  cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId,local(e));
   if(ptrs.size===2){fillTap=null;tapTrack=null;press=null;tapSeq.n=0;endTemp();cancelCur();startPinch();return}
   if(ptrs.size>2)return;
@@ -307,6 +339,7 @@ cv.addEventListener('pointerdown',e=>{
   render();
 });
 cv.addEventListener('pointermove',e=>{
+  if(palmOn&&palmRej.has(e.pointerId))return;
   if(tool==='erase'&&bg){
     eraserPt=local(e);
     if(!ptrs.has(e.pointerId)&&!eraserRaf)eraserRaf=requestAnimationFrame(()=>{eraserRaf=0;render()});   // mouse hover: redraw once per frame
@@ -344,7 +377,10 @@ cv.addEventListener('pointermove',e=>{
   render();
 });
 function end(e){
-  if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
+  if(palmOn&&palmRej.delete(e.pointerId))return;
+  if(!ptrs.has(e.pointerId))return;
+  if(palmOn)palmUp(e);
+  ptrs.delete(e.pointerId);
   if(ptrs.size<2)pinch=null;
   const now=performance.now();
   if(e.pointerType!=='mouse'&&eraserPt){eraserPt=null;render()}   // a finger left the screen: no footprint any more
@@ -974,7 +1010,7 @@ async function openSettings(){
   sel.add(new Option(t('settings.langAuto'),'auto'));
   langs.forEach(l=>sel.add(new Option(l.name,l.code)));
   sel.value=[...sel.options].some(o=>o.value===settings.lang)?settings.lang:'auto';
-  $('setW').value=settings.newW;$('setH').value=settings.newH;$('setDiag').checked=settings.diag;
+  $('setW').value=settings.newW;$('setH').value=settings.newH;$('setDiag').checked=settings.diag;$('setPalm').checked=settings.palm;$('setPalmMs').value=settings.palmMs;setDlg.querySelectorAll('.help').forEach(b=>{$(b.dataset.help).hidden=true;b.setAttribute('aria-expanded','false')});
   setDlg.showModal();
 }
 function applySettings(){
@@ -982,8 +1018,9 @@ function applySettings(){
   if(!validSize(w)||!validSize(h)){
     const e=$('setErr');e.textContent=t('newdlg.error',{min:16,max:MAXDIM});e.hidden=false;return;
   }
+  let pm=parseInt($('setPalmMs').value,10);if(!(pm>=0&&pm<=1000))pm=250;
   const lang=$('setLang').value,langChanged=lang!==settings.lang;
-  settings={lang,newW:w,newH:h,diag:$('setDiag').checked};saveSettings();setDlg.close();
+  settings={lang,newW:w,newH:h,diag:$('setDiag').checked,palm:$('setPalm').checked,palmMs:pm};palmOn=settings.palm;palmReset();saveSettings();setDlg.close();
   dispatchEvent(new CustomEvent('markup:diag',{detail:settings.diag}));
   if(langChanged){            // strings are applied at startup, so reload to use the new language
     const u=new URL(location.href);
@@ -992,6 +1029,7 @@ function applySettings(){
   }
 }
 $('setOk').onclick=applySettings;
+setDlg.querySelectorAll('.help').forEach(b=>b.onclick=()=>{const n=$(b.dataset.help),show=n.hidden;n.hidden=!show;b.setAttribute('aria-expanded',show)});   // ? button shows / hides its explanation
 addEventListener('markup:diag-closed',()=>{settings.diag=false;saveSettings()});   // the panel's own close button
 $('setCancel').onclick=()=>setDlg.close();
 setDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();applySettings()}});

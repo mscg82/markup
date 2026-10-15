@@ -166,5 +166,9 @@
   "diag.copied": "Copiato",
   "diag.copyFailed": "Copia non riuscita",
   "diag.clear": "Azzera",
-  "diag.close": "Chiudi la diagnostica"
+  "diag.close": "Chiudi la diagnostica",
+  "settings.palm": "Rifiuto del palmo (pennino su schermi touch)",
+  "settings.palmMs": "Finestra del secondo tocco (ms)",
+  "settings.palmNote": "Ignora la mano appoggiata sullo schermo mentre usi un pennino. Un secondo dito deve toccare entro la finestra dal primo, così il pizzico funziona ancora; un tocco in ritardo molto più piccolo indica che il primo era un palmo. Un pizzico lento può essere ignorato.",
+  "settings.help": "Mostra la spiegazione"
 }

@@ -182,8 +182,11 @@
     <label><span data-i18n="newdlg.width"></span><input id="setW" type="number" inputmode="numeric" min="16" max="2400"></label>
     <label><span data-i18n="newdlg.height"></span><input id="setH" type="number" inputmode="numeric" min="16" max="2400"></label>
   </div>
-  <label class="chk"><input id="setDiag" type="checkbox"><span data-i18n="settings.diag"></span></label>
-  <p class="dlg-note" data-i18n="settings.diagNote"></p>
+  <div class="chk-row"><label class="chk"><input id="setPalm" type="checkbox"><span data-i18n="settings.palm"></span></label><button type="button" class="help" data-help="palmNote" aria-expanded="false" aria-controls="palmNote" data-i18n-aria-label="settings.help" data-i18n-title="settings.help">?</button></div>
+  <p id="palmNote" class="dlg-note" data-i18n="settings.palmNote" hidden></p>
+  <label class="dlg-field"><span data-i18n="settings.palmMs"></span><input id="setPalmMs" type="number" inputmode="numeric" min="0" max="1000" step="50"></label>
+  <div class="chk-row"><label class="chk"><input id="setDiag" type="checkbox"><span data-i18n="settings.diag"></span></label><button type="button" class="help" data-help="diagNote" aria-expanded="false" aria-controls="diagNote" data-i18n-aria-label="settings.help" data-i18n-title="settings.help">?</button></div>
+  <p id="diagNote" class="dlg-note" data-i18n="settings.diagNote" hidden></p>
   <p id="setErr" class="dlg-err" hidden></p>
   <div class="dlg-actions"><button id="setCancel" type="button" data-i18n="common.cancel"></button><button id="setOk" type="button" class="primary" data-i18n="settings.save"></button></div>
 </dialog>

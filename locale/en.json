@@ -166,5 +166,9 @@
   "diag.copied": "Copied",
   "diag.copyFailed": "Copy failed",
   "diag.clear": "Clear",
-  "diag.close": "Close diagnostics"
+  "diag.close": "Close diagnostics",
+  "settings.palm": "Palm rejection (stylus on touch screens)",
+  "settings.palmMs": "Second-touch window (ms)",
+  "settings.palmNote": "Ignores a hand resting on the screen while you use a stylus. A second finger must land within the window of the first, so pinching still works; a much smaller late touch means the first was a palm. A slow pinch may be ignored.",
+  "settings.help": "Show explanation"
 }
