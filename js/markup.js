@@ -685,16 +685,14 @@ for(const el of[$('wv'),$('wvPop')]){
 }
 $('widthL').oninput=e=>setWidth((+e.target.value));
 function clearWork(all){
-  if(!all&&!ops.length&&!pending){msg(t('msg.nothingToClear'));return}
+  if(!all&&!pending&&ops.every(isResizeOp)){msg(t('msg.nothingToClear'));return}   // resize/crop steps are not drawings
   if(!confirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
-  const baked=!all&&ops.some(isResizeOp);   // clearing the drawing keeps the (enlarged) background
-  if(baked)bg0=bg;
-  cur=null;ops=[];redoStack=[];discardPending();resetNames();resetSnapshots();
+  cur=null;ops=all?[]:ops.filter(isResizeOp);redoStack=[];discardPending();resetNames();resetSnapshots();   // clearing the drawing keeps the resize / crop steps in the history
   if(all){
     bg=bg0=L=lc=null;
     try{localStorage.removeItem('markup.bg');localStorage.removeItem('markup.ops')}catch(e){}
     msg(t('msg.removedAll'));
-  }else{replay();persist(baked);msg(t('msg.cleared'))}
+  }else{replay();persist();msg(t('msg.cleared'))}
   ui();render();
 }
 (()=>{

@@ -11,7 +11,7 @@ index.html (markup), css/style.css, js/markup.js (app logic), js/colorpicker.js 
 - Background is an unmodifiable canvas (downscaled to max 2400 px). Drawing goes on a separate transparent layer canvas.
 - History = list of vector operations {t: pen|line|rect|circle|erase, c, w, points}. Undo pops the last op and replays the rest. The eraser is an op using destination-out on the drawing layer only.
 - Zoom/pan = scale + offset (s, ox, oy) applied at render time. Pointer events for mouse/touch/pen; two-finger pinch zooms and pans; Move tool, Space, right/middle mouse and arrow keys also pan.
-- Clear button: click = clear drawing, long press (700 ms) = also remove background; both use confirm() and are not undoable.
+- Clear button: click = clear drawing (keeps the resize/frame/crop ops in the history, only non-resize ops are removed), long press (700 ms) = also remove background; both use confirm() and are not undoable.
 - Export: merge background + layer at full resolution to JPEG.
 - localStorage keys: markup.bg (JPEG data URL), markup.ops (operations JSON), markup.prefs (color, draw width, erase width). Always wrap storage access in try/catch and warn the user if saving fails.
 - Offline: sw.js uses stale-while-revalidate. When a cached file is added, add it to ASSETS. Version rule: CACHE in sw.js (currently markup-v28) and APP_VERSION in js/markup.js (shown in the app's bottom-right corner) always change together, and only (1) in the first code change after the owner announces that a new development cycle has begun, or (2) when the owner explicitly asks for a bump. Never bump them at any other time.
