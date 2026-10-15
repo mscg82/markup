@@ -32,13 +32,14 @@ $('ver').textContent=t('app.version',{version:APP_VERSION});
 /* ---------- settings (persisted in localStorage) ---------- */
 const SETTINGS_KEY='markup.settings';
 const validSize=v=>Number.isInteger(v)&&v>=16&&v<=MAXDIM;
-let settings={lang:'auto',newW:1600,newH:1200};
+let settings={lang:'auto',newW:1600,newH:1200,diag:false};
 try{
   const p=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'null');
   if(p){
     if(typeof p.lang==='string'&&/^(auto|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$/.test(p.lang))settings.lang=p.lang;
     if(validSize(p.newW))settings.newW=p.newW;
     if(validSize(p.newH))settings.newH=p.newH;
+    if(typeof p.diag==='boolean')settings.diag=p.diag;
   }
 }catch(e){}
 function saveSettings(){
@@ -973,7 +974,7 @@ async function openSettings(){
   sel.add(new Option(t('settings.langAuto'),'auto'));
   langs.forEach(l=>sel.add(new Option(l.name,l.code)));
   sel.value=[...sel.options].some(o=>o.value===settings.lang)?settings.lang:'auto';
-  $('setW').value=settings.newW;$('setH').value=settings.newH;
+  $('setW').value=settings.newW;$('setH').value=settings.newH;$('setDiag').checked=settings.diag;
   setDlg.showModal();
 }
 function applySettings(){
@@ -982,7 +983,8 @@ function applySettings(){
     const e=$('setErr');e.textContent=t('newdlg.error',{min:16,max:MAXDIM});e.hidden=false;return;
   }
   const lang=$('setLang').value,langChanged=lang!==settings.lang;
-  settings={lang,newW:w,newH:h};saveSettings();setDlg.close();
+  settings={lang,newW:w,newH:h,diag:$('setDiag').checked};saveSettings();setDlg.close();
+  dispatchEvent(new CustomEvent('markup:diag',{detail:settings.diag}));
   if(langChanged){            // strings are applied at startup, so reload to use the new language
     const u=new URL(location.href);
     if(u.searchParams.has('lang')){u.searchParams.delete('lang');location.replace(u.href)}   // ?lang= would override the setting
@@ -990,6 +992,7 @@ function applySettings(){
   }
 }
 $('setOk').onclick=applySettings;
+addEventListener('markup:diag-closed',()=>{settings.diag=false;saveSettings()});   // the panel's own close button
 $('setCancel').onclick=()=>setDlg.close();
 setDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();applySettings()}});
 

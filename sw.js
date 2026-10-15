@@ -2,7 +2,7 @@
 const CACHE = 'markup-v26';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
-  './css/style.css', './js/markup.js', './js/colorpicker.js', './js/i18n.js',
+  './css/style.css', './js/markup.js', './js/colorpicker.js', './js/i18n.js', './js/diag.js',
   './locale/languages.json',
   './locale/en.json', './locale/it.json',   // add every new language file here
   './img/favicon.ico', './img/favicon.svg', './img/apple-touch-icon.png',

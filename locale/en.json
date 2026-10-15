@@ -153,5 +153,18 @@
   "confirm.snapDelete": "Delete snapshot \"{name}\"?",
   "menu.snapList": "Existing snapshots",
   "menu.snapList.title": "List the saved snapshots to restore or delete them",
-  "width.valueLabel": "Line width in pixels (type a value from 1 to 80)"
+  "width.valueLabel": "Line width in pixels (type a value from 1 to 80)",
+  "settings.diag": "Show touch diagnostics",
+  "settings.diagNote": "Shows an on-screen panel with what the browser reports for each touch, pen or mouse pointer (type, contact size, pressure). Useful to find out whether a device can tell a stylus, a finger and a palm apart.",
+  "diag.title": "Touch diagnostics",
+  "diag.active": "Pointers on screen now",
+  "diag.stats": "Totals by pointer type (n = presses, w/h = contact size in px, pmax = highest pressure)",
+  "diag.log": "Latest events",
+  "diag.none": "(none)",
+  "diag.noData": "(no touches yet)",
+  "diag.copy": "Copy",
+  "diag.copied": "Copied",
+  "diag.copyFailed": "Copy failed",
+  "diag.clear": "Clear",
+  "diag.close": "Close diagnostics"
 }
