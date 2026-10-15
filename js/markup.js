@@ -3,6 +3,7 @@ const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
 let bg=null,bg0=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,viewW=0,viewH=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
+let crop=null;   // crop selection {x0,y0,x1,y1} in image pixels while the crop mode is active
 const ptrs=new Map();let pinch=null,last=null,fillTap=null,tapTrack=null;
 let pending=null;   // rectangle/circle/star that has been drawn but not placed yet (see "pending shape" below)
 const MAXDIM=2400;
@@ -26,7 +27,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v27';   // keep in step with CACHE in sw.js
+const APP_VERSION='v28';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -169,12 +170,17 @@ function commitFill(f){
 // history (Resize frame). The drawing layer L always has the size of bg. Coordinates of an operation are
 // those of the image as it was when the operation was made, so frames never rewrite earlier operations.
 function newLayer(w,h){L=document.createElement('canvas');L.width=w;L.height=h;lc=L.getContext('2d')}
-function applyFrame(o){   // enlarge the background (new area filled with o.c) and the drawing layer, content shifted by left/top
-  const w=bg.width+o.left+o.right,h=bg.height+o.top+o.bottom;
+function frameBg(b,o){   // enlarge the background (new area filled with o.c), content shifted by left/top
+  const w=b.width+o.left+o.right,h=b.height+o.top+o.bottom;
   const nb=document.createElement('canvas');nb.width=w;nb.height=h;
-  const x=nb.getContext('2d');x.fillStyle=o.c;x.fillRect(0,0,w,h);x.drawImage(bg,o.left,o.top);
-  const old=L;newLayer(w,h);lc.drawImage(old,o.left,o.top);
-  bg=nb;
+  const x=nb.getContext('2d');x.fillStyle=o.c;x.fillRect(0,0,w,h);x.drawImage(b,o.left,o.top);
+  return nb;
+}
+function cropBg(b,o){   // keep only the box x,y,w,h (clamped to the image, so a damaged history cannot fail)
+  const x=Math.min(o.x,b.width-1),y=Math.min(o.y,b.height-1),w=Math.min(o.w,b.width-x),h=Math.min(o.h,b.height-y);
+  const nb=document.createElement('canvas');nb.width=w;nb.height=h;
+  nb.getContext('2d').drawImage(b,x,y,w,h,0,0,w,h);
+  return nb;
 }
 // Bicubic resampling (Keys kernel, a = -0.5, the same as Pillow's BICUBIC): two separable passes. When the image is
 // reduced the kernel is stretched by the scale factor, so shrinking is smooth instead of aliased.
@@ -244,18 +250,38 @@ function unsharp(d,w,h,amt){
   }
 }
 let scaleCache=null;   // replay() runs on every undo: remember the last resampled background instead of recomputing it
-function applyScale(o){   // "scale" operation: the background is resampled to o.w x o.h (it is only created when the history is empty)
-  if(!(scaleCache&&scaleCache.src===bg&&scaleCache.w===o.w&&scaleCache.h===o.h&&scaleCache.s===(o.s|0)))scaleCache={src:bg,w:o.w,h:o.h,s:o.s|0,c:resampleCanvas(bg,o.w,o.h,o.s|0)};
-  const nb=scaleCache.c;
-  const old=L;newLayer(o.w,o.h);lc.imageSmoothingQuality='high';lc.drawImage(old,0,0,o.w,o.h);
+function scaleBg(b,o){   // "scale" operation: the background is resampled to o.w x o.h
+  if(!(scaleCache&&scaleCache.src===b&&scaleCache.w===o.w&&scaleCache.h===o.h&&scaleCache.s===(o.s|0)))scaleCache={src:b,w:o.w,h:o.h,s:o.s|0,c:resampleCanvas(b,o.w,o.h,o.s|0)};
+  return scaleCache.c;
+}
+const isResizeOp=o=>o.t==='frame'||o.t==='scale'||o.t==='crop';
+const bgStep=(b,o)=>o.t==='frame'?frameBg(b,o):o.t==='crop'?cropBg(b,o):scaleBg(b,o);   // the background after one resize operation
+function applyResizeOp(o){   // applies one resize operation to the current background and drawing layer
+  const ol=L,nb=bgStep(bg,o);newLayer(nb.width,nb.height);
+  if(o.t==='frame')lc.drawImage(ol,o.left,o.top);
+  else if(o.t==='crop')lc.drawImage(ol,-o.x,-o.y);
+  else{lc.imageSmoothingQuality='high';lc.drawImage(ol,0,0,nb.width,nb.height)}
   bg=nb;
 }
-const isResizeOp=o=>o.t==='frame'||o.t==='scale';
-const applyResizeOp=o=>o.t==='frame'?applyFrame(o):applyScale(o);
+// Cache of the background produced by the leading resize operations of the history (any number of frames, scales
+// and crops made before the first drawing mark). replay() runs often (every undo, every cancelled stroke...), so it
+// starts from this canvas instead of redoing the resizes. It is valid while bg0 and the cached operations are the same.
+let bgCache=null;   // {src:bg0, ops:[...], bg:canvas}
+function syncBgCache(){if(ops.every(isResizeOp))bgCache={src:bg0,ops:ops.slice(),bg}}   // after a resize op was applied directly
 function replay(){
-  bg=bg0;
-  if(L.width!==bg.width||L.height!==bg.height)newLayer(bg.width,bg.height);else lc.clearRect(0,0,L.width,L.height);
-  for(const o of ops){if(isResizeOp(o))applyResizeOp(o);else drawOp(lc,o)}
+  crop=null;
+  let p=0;while(p<ops.length&&isResizeOp(ops[p]))p++;
+  let from=0,b=bg0;
+  const c=bgCache;
+  if(p>0&&c&&c.src===bg0&&c.ops.length<=p){
+    let ok=true;for(let i=0;i<c.ops.length;i++)if(c.ops[i]!==ops[i]){ok=false;break}
+    if(ok){from=c.ops.length;b=c.bg}
+  }
+  for(let i=from;i<p;i++)b=bgStep(b,ops[i]);
+  if(p>0&&from<p)bgCache={src:bg0,ops:ops.slice(0,p),bg:b};
+  bg=b;
+  if(L.width!==b.width||L.height!==b.height)newLayer(b.width,b.height);else lc.clearRect(0,0,L.width,L.height);
+  for(let i=p;i<ops.length;i++){const o=ops[i];if(isResizeOp(o))applyResizeOp(o);else drawOp(lc,o)}
 }
 
 /* ---------- view ---------- */
@@ -273,7 +299,7 @@ function resize(){
 function render(){
   const d=devicePixelRatio||1;
   ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#1f2326';ctx.fillRect(0,0,cv.width,cv.height);
-  if(!bg)return;
+  if(!bg){crop=null;positionCrop();return}
   ctx.setTransform(d*s,0,0,d*s,d*ox,d*oy);
   ctx.imageSmoothingQuality='high';
   ctx.drawImage(bg,0,0);ctx.drawImage(L,0,0);
@@ -288,7 +314,14 @@ function render(){
   }
   ctx.setTransform(d*s,0,0,d*s,d*ox,d*oy);
   ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=1/s;ctx.strokeRect(0,0,bg.width,bg.height);
-  positionMove();
+  if(crop){   // crop area: the rest is dimmed, thin lines (dark under light, readable on any image) mark the box
+    const {x0,y0,x1,y1}=crop,W=bg.width,H=bg.height;
+    ctx.fillStyle='rgba(0,0,0,.5)';
+    ctx.fillRect(0,0,W,y0);ctx.fillRect(0,y1,W,H-y1);ctx.fillRect(0,y0,x0,y1-y0);ctx.fillRect(x1,y0,W-x1,y1-y0);
+    ctx.strokeStyle='rgba(0,0,0,.7)';ctx.lineWidth=3/s;ctx.strokeRect(x0,y0,x1-x0,y1-y0);
+    ctx.strokeStyle='#fff';ctx.lineWidth=1/s;ctx.strokeRect(x0,y0,x1-x0,y1-y0);
+  }
+  positionMove();positionCrop();
 }
 function fit(){
   if(!bg)return;const r=stage.getBoundingClientRect();
@@ -351,6 +384,7 @@ cv.addEventListener('pointerdown',e=>{
   ptrs.set(e.pointerId,local(e));
   if(ptrs.size===2){fillTap=null;tapTrack=null;press=null;tapSeq.n=0;endTemp();cancelCur();startPinch();return}
   if(ptrs.size>2)return;
+  if(crop){panning=true;last=local(e);setCursor();return}   // while cropping, a single touch only pans the view
   if(e.button===0){
     const now=performance.now();
     if(tapSeq.n>=1&&now-tapSeq.tEnd<=TAP_GAP&&e.pointerType===tapSeq.type&&Math.hypot(e.clientX-tapSeq.x,e.clientY-tapSeq.y)<=TAP_DIST){
@@ -676,7 +710,7 @@ function clearWork(all){
   b.addEventListener('click',e=>{if(e.detail===0&&!b.disabled)clearWork(false)}); // keyboard
 })();
 $('undo').onclick=()=>{commitPending();if(!ops.length)return;const o=ops.pop();redoStack.push(o);replay();persist();ui();if(isResizeOp(o))fit();else render()};
-$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);if(isResizeOp(o)){applyResizeOp(o);persist();ui();fit()}else{drawOp(lc,o);persist();ui();render()}};
+$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);if(isResizeOp(o)){applyResizeOp(o);syncBgCache();persist();ui();fit()}else{drawOp(lc,o);persist();ui();render()}};
 // Long press: jump to the very first (Undo) or the very last (Redo) step of the history.
 function undoAll(){commitPending();if(!ops.length)return;redoStack.push(...ops.reverse());ops=[];replay();persist();ui();fit()}   // reversed, so Redo gives the steps back in order
 function redoAll(){commitPending();if(!redoStack.length)return;ops.push(...redoStack.reverse());redoStack=[];replay();persist();ui();fit()}
@@ -718,7 +752,7 @@ function setBackground(img){
   const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));
   const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
   const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
-  bg=bg0=c;newLayer(c.width,c.height);showSize();
+  crop=null;bg=bg0=c;newLayer(c.width,c.height);showSize();
 }
 $('file').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
@@ -774,6 +808,7 @@ const num=v=>typeof v==='number'&&isFinite(v);
 const pt=p=>Array.isArray(p)&&p.length===2&&num(p[0])&&num(p[1]);
 function validOp(o){
   if(o&&o.t==='scale')return (o.s===undefined||o.s===0||o.s===1||o.s===2)&&Number.isInteger(o.w)&&Number.isInteger(o.h)&&o.w>=1&&o.h>=1&&o.w<=MAXDIM&&o.h<=MAXDIM;
+  if(o&&o.t==='crop')return [o.x,o.y,o.w,o.h].every(Number.isInteger)&&o.x>=0&&o.y>=0&&o.w>=1&&o.h>=1&&o.x<=MAXDIM&&o.y<=MAXDIM&&o.w<=MAXDIM&&o.h<=MAXDIM;
   if(o&&o.t==='frame')return [o.top,o.right,o.bottom,o.left].every(v=>Number.isInteger(v)&&v>=0&&v<=MAXDIM)&&typeof o.c==='string'&&/^#[0-9a-f]{6}$/i.test(o.c);
   if(o&&o.t==='fill')return typeof o.c==='string'&&num(o.x)&&num(o.y)&&num(o.tol);
   if(!o||typeof o!=='object'||!num(o.w)||typeof o.c!=='string')return false;
@@ -790,7 +825,7 @@ function restoreStatus(st,okMsg){
   const img=new Image();
   img.onload=()=>{
     const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));let W=Math.round(img.width*k),H=Math.round(img.height*k);
-    for(const o of st.operations){if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}else if(o.t==='scale'){W=o.w;H=o.h}}
+    for(const o of st.operations){if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}else if(o.t==='scale'||o.t==='crop'){W=o.w;H=o.h}}
     if(W>MAXDIM||H>MAXDIM){msg(t('msg.badStatus'));return}   // the frames would make the image too large
     setBackground(img);cur=null;ops=JSON.parse(JSON.stringify(st.operations));redoStack=[];discardPending();resetNames();resetSnapshots();replay();   // the background changes, so the snapshots go
     const p=st.preferences||{};
@@ -878,7 +913,7 @@ async function restoreSnapshot(id){
     const d=await unpackSnapshot(s);
     if(!bg0||!d||!Array.isArray(d.operations)||!d.operations.every(validOp))throw new Error('bad snapshot');
     let W=bg0.width,H=bg0.height;
-    for(const o of d.operations){if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}else if(o.t==='scale'){W=o.w;H=o.h}}
+    for(const o of d.operations){if(o.t==='frame'){W+=o.left+o.right;H+=o.top+o.bottom}else if(o.t==='scale'||o.t==='crop'){W=o.w;H=o.h}}
     if(W>MAXDIM||H>MAXDIM)throw new Error('too large');
     cur=null;ops=d.operations;redoStack=[];discardPending();resetNames();replay();   // same background, new history
     const p=d.preferences||{};
@@ -975,6 +1010,7 @@ function deleteSnapshot(id){
   for(const x of subs)x.mi.onclick=()=>toggleSub(x,x.sub.hidden);
   $('miFrame').onclick=()=>{close();openFrameDialog()};
   $('miScale').onclick=()=>{close();openScaleDialog()};
+  $('miCrop').onclick=()=>{close();openCrop()};
   $('miOpen').onclick=()=>{close();$('file').click()};
   $('miEmpty').onclick=()=>{close();openNewDialog()};
   $('miSnapNew').onclick=()=>{close();commitPending();openSnapDialog()};
@@ -1173,7 +1209,7 @@ function scaleValues(){
 }
 function openScaleDialog(){
   if(!bg)return;
-  if(ops.length||pending){alert(t('scaledlg.needClear'));return}   // the history must be empty
+  if(ops.some(o=>!isResizeOp(o))||pending){alert(t('scaledlg.needClear'));return}   // only resize operations may precede it
   scaleRatio=bg.width/bg.height;
   $('scW').value=bg.width;$('scH').value=bg.height;$('scKeep').checked=true;$('scSharp').value='1';$('scaleErr').hidden=true;
   $('scaleCur').textContent=t('scaledlg.current',{w:bg.width,h:bg.height});
@@ -1186,7 +1222,7 @@ function applyScaleDialog(){
   if(v[0]===bg.width&&v[1]===bg.height){$('scaleErr').textContent=t('scaledlg.same');$('scaleErr').hidden=false;return}
   const o={t:'scale',w:v[0],h:v[1],s:(+$('scSharp').value)};
   scaleDlg.close();
-  ops.push(o);redoStack=[];applyScale(o);persist();ui();fit();
+  ops.push(o);redoStack=[];applyResizeOp(o);syncBgCache();persist();ui();fit();
   msg(t('msg.scaled',{w:o.w,h:o.h}));
 }
 $('scW').addEventListener('input',()=>{
@@ -1237,7 +1273,7 @@ function applyFrameDialog(){
   if(w>MAXDIM||h>MAXDIM){err('framedlg.errSize');return}
   const o={t:'frame',top:a[0],right:a[1],bottom:a[2],left:a[3],c:$('frameColor').value};
   lastFrameColor=o.c;frameDlg.close();
-  ops.push(o);redoStack=[];applyFrame(o);persist();ui();fit();
+  ops.push(o);redoStack=[];applyResizeOp(o);syncBgCache();persist();ui();fit();
   msg(t('msg.framed',{w,h}));
 }
 FR_IDS.forEach(id=>$(id).addEventListener('input',()=>{$('frameErr').hidden=true;updateFrameInfo()}));
@@ -1245,6 +1281,57 @@ $('frameOk').onclick=applyFrameDialog;
 $('frameCancel').onclick=()=>frameDlg.close();
 frameDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type==='number'){e.preventDefault();applyFrameDialog()}});
 newDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type==='number'){e.preventDefault();createEmptyImage()}});
+
+/* ---------- crop background ---------- */
+// Crop mode: two corner handles (top-left, bottom-right) select the part of the background to keep, thin lines mark
+// the box and a check button at its top-right corner confirms. The result is a "crop" operation {x,y,w,h} in the
+// history (in the pixels of the image as it was), so it can be undone and redone. Like resizing, it is only possible
+// before any drawing mark exists. the X button, Escape or any replay (undo, clear, import...) leaves the mode.
+const cropA=$('cropA'),cropB=$('cropB'),cropOk=$('cropOk'),cropNo=$('cropNo');
+function openCrop(){
+  if(!bg)return;
+  if(ops.some(o=>!isResizeOp(o))||pending){alert(t('crop.needClear'));return}
+  crop={x0:0,y0:0,x1:bg.width,y1:bg.height};render();msg(t('crop.hint'));
+}
+function cancelCrop(){if(crop){crop=null;render()}}
+function positionCrop(){
+  if(!crop){cropA.hidden=cropB.hidden=cropOk.hidden=cropNo.hidden=true;return}
+  const W=stage.clientWidth,H=stage.clientHeight,o=HB*0.45,B=36,gap=6;
+  const put=(h,cx,cy,sz)=>{h.style.left=Math.min(Math.max(cx-sz/2,4),W-sz-4)+'px';h.style.top=Math.min(Math.max(cy-sz/2,4),H-sz-4)+'px';h.hidden=false};
+  put(cropA,crop.x0*s+ox-o,crop.y0*s+oy-o,HB);
+  put(cropB,crop.x1*s+ox+o,crop.y1*s+oy+o,HB);
+  put(cropOk,crop.x1*s+ox+B/2+gap,crop.y0*s+oy-B/2-gap,B);   // just outside the top-right corner
+  const okTop=parseFloat(cropOk.style.top);
+  put(cropNo,parseFloat(cropOk.style.left)+B/2,okTop+B+gap+B/2,B);   // cancel, right under it (follows the check when that one is kept on screen)
+}
+let cDrag=null;
+for(const [h,which] of [[cropA,0],[cropB,1]]){
+  h.style.minHeight='0';
+  h.addEventListener('pointerdown',e=>{
+    if(!crop)return;e.preventDefault();h.setPointerCapture(e.pointerId);
+    cDrag={id:e.pointerId,which,x:e.clientX,y:e.clientY,c:{...crop}};
+  });
+  h.addEventListener('pointermove',e=>{
+    if(!cDrag||cDrag.id!==e.pointerId||!crop)return;
+    const dx=(e.clientX-cDrag.x)/s,dy=(e.clientY-cDrag.y)/s,c=cDrag.c,W=bg.width,H=bg.height,M=Math.min(16,W,H);
+    const cl=(v,a,b)=>Math.round(Math.min(Math.max(v,a),b));
+    if(which===0){crop.x0=cl(c.x0+dx,0,crop.x1-M);crop.y0=cl(c.y0+dy,0,crop.y1-M)}
+    else{crop.x1=cl(c.x1+dx,crop.x0+M,W);crop.y1=cl(c.y1+dy,crop.y0+M,H)}
+    render();
+  });
+  const end=e=>{if(cDrag&&cDrag.id===e.pointerId)cDrag=null};
+  h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);
+}
+cropOk.onclick=()=>{
+  if(!crop)return;
+  const x=Math.round(crop.x0),y=Math.round(crop.y0),w=Math.round(crop.x1)-x,h=Math.round(crop.y1)-y;
+  if(x===0&&y===0&&w===bg.width&&h===bg.height){msg(t('crop.same'));return}
+  const o={t:'crop',x,y,w,h};crop=null;
+  ops.push(o);redoStack=[];applyResizeOp(o);syncBgCache();persist();ui();fit();
+  msg(t('msg.cropped',{w,h}));
+};
+cropNo.onclick=cancelCrop;   // touch devices have no Escape key
+addEventListener('keydown',e=>{if(e.key==='Escape'&&crop&&!(e.target.closest&&e.target.closest('dialog')))cancelCrop()});
 
 /* ---------- file names (Save JPEG / Export status) ---------- */
 // The last name used is remembered separately for each action; it is forgotten

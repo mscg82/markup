@@ -175,5 +175,17 @@
   "scaledlg.sharp0": "Off (smooth bicubic)",
   "scaledlg.sharp1": "Normal (Lanczos)",
   "scaledlg.sharp2": "Strong (Lanczos)",
-  "scaledlg.sharpNote": "Normal and Strong keep text and thin lines crisper when the image is reduced. They have no effect when it is enlarged."
+  "scaledlg.sharpNote": "Normal and Strong keep text and thin lines crisper when the image is reduced. They have no effect when it is enlarged.",
+  "menu.crop": "Crop background",
+  "menu.crop.title": "Keep only a part of the background image",
+  "crop.needClear": "The background can only be cropped when there are no drawing marks in the history.\n\nClear the image first (the Clear button keeps the background and empties the history), then try again.",
+  "crop.hint": "Drag the two corner handles to choose the area to keep, then tap the check mark.",
+  "crop.same": "The whole image is selected: move a corner handle first.",
+  "crop.handle.title": "Drag to move this corner of the crop area",
+  "crop.handle.label": "Crop corner",
+  "crop.ok.title": "Crop the background to this area",
+  "crop.ok.label": "Confirm crop",
+  "msg.cropped": "Background cropped: the image is now {w} × {h} px.",
+  "crop.cancel.title": "Cancel the crop",
+  "crop.cancel.label": "Cancel crop"
 }

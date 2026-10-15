@@ -14,7 +14,7 @@ index.html (markup), css/style.css, js/markup.js (app logic), js/colorpicker.js 
 - Clear button: click = clear drawing, long press (700 ms) = also remove background; both use confirm() and are not undoable.
 - Export: merge background + layer at full resolution to JPEG.
 - localStorage keys: markup.bg (JPEG data URL), markup.ops (operations JSON), markup.prefs (color, draw width, erase width). Always wrap storage access in try/catch and warn the user if saving fails.
-- Offline: sw.js uses stale-while-revalidate. When a cached file is added, add it to ASSETS. Version rule: CACHE in sw.js (currently markup-v27) and APP_VERSION in js/markup.js (shown in the app's bottom-right corner) always change together, and only (1) in the first code change after the owner announces that a new development cycle has begun, or (2) when the owner explicitly asks for a bump. Never bump them at any other time.
+- Offline: sw.js uses stale-while-revalidate. When a cached file is added, add it to ASSETS. Version rule: CACHE in sw.js (currently markup-v28) and APP_VERSION in js/markup.js (shown in the app's bottom-right corner) always change together, and only (1) in the first code change after the owner announces that a new development cycle has begun, or (2) when the owner explicitly asks for a bump. Never bump them at any other time.
 - Icons: Firefox Android ignores SVG for shortcuts, so keep raster icons and favicon.ico declared before the SVG in <head>.
 
 ## Working style
@@ -33,3 +33,4 @@ fill option for shapes, remembering the selected tool, text tool, offline update
 - Palm rejection lives in js/markup.js (palmOn, palmDown, palmUp, palmReset; settings.palm default false, settings.palmMs default 250). Every hook is guarded by `palmOn` first so the off state costs one boolean test; rejected pointers are kept in palmRej and never enter `ptrs`. Size ratios (0.6, 1.8) and the 1 s after-window are constants, not settings.
 
 - Resize background: resampleCanvas(src,w,h,sharp) in js/markup.js. The 'scale' op carries `s` (0 legacy bicubic, 1 normal, 2 strong Lanczos-3 + clamped unsharp). Never change what s=0/missing produces, because saved histories replay it.
+- Resize operations are 'frame', 'scale' and 'crop' ({x,y,w,h}); isResizeOp() lists them and bgStep(b,o) computes the background after one of them. replay() starts from bgCache (the background after the leading run of resize ops, valid while bg0 and those op objects are unchanged) so drawing-time replays never redo resizes; call syncBgCache() after applying a resize op directly. Crop mode state is the `crop` variable (cleared by replay/setBackground/render without bg).

@@ -137,6 +137,10 @@ html:not(.i18n-ready) body{visibility:hidden}
 .hd:hover{background:#fff}
 .hd.rad{cursor:ns-resize}
 .hd[hidden]{display:none}
+.mv.ok{cursor:pointer}
+.mv.no{background:#f4f4f4}
+.mv.no:hover{background:#fff}
+.mv.ok svg{width:22px;height:22px;stroke-width:2.6}
 .mv:hover{background:#f5c352}
 .mv:active{cursor:grabbing}
 .mv[hidden]{display:none}

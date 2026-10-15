@@ -175,5 +175,17 @@
   "scaledlg.sharp0": "Disattivata (bicubica morbida)",
   "scaledlg.sharp1": "Normale (Lanczos)",
   "scaledlg.sharp2": "Forte (Lanczos)",
-  "scaledlg.sharpNote": "Normale e Forte mantengono più nitidi testo e linee sottili quando l'immagine viene ridotta. Non hanno effetto quando viene ingrandita."
+  "scaledlg.sharpNote": "Normale e Forte mantengono più nitidi testo e linee sottili quando l'immagine viene ridotta. Non hanno effetto quando viene ingrandita.",
+  "menu.crop": "Ritaglia sfondo",
+  "menu.crop.title": "Mantiene solo una parte dell'immagine di sfondo",
+  "crop.needClear": "Lo sfondo può essere ritagliato solo se nella cronologia non ci sono segni di disegno.\n\nPrima pulisci l'immagine (il pulsante Cancella mantiene lo sfondo e svuota la cronologia), poi riprova.",
+  "crop.hint": "Trascina i due angoli per scegliere l'area da mantenere, poi tocca il segno di spunta.",
+  "crop.same": "È selezionata tutta l'immagine: sposta prima un angolo.",
+  "crop.handle.title": "Trascina per spostare questo angolo dell'area di ritaglio",
+  "crop.handle.label": "Angolo di ritaglio",
+  "crop.ok.title": "Ritaglia lo sfondo su quest'area",
+  "crop.ok.label": "Conferma ritaglio",
+  "msg.cropped": "Sfondo ritagliato: l'immagine ora è {w} × {h} px.",
+  "crop.cancel.title": "Annulla il ritaglio",
+  "crop.cancel.label": "Annulla ritaglio"
 }

@@ -31,6 +31,7 @@
         <div id="subResize" class="sub" role="menu" hidden>
           <button role="menuitem" id="miFrame" data-i18n="menu.resizeFrame" data-i18n-title="menu.resizeFrame.title"></button>
           <button role="menuitem" id="miScale" data-i18n="menu.resizeBg" data-i18n-title="menu.resizeBg.title"></button>
+          <button role="menuitem" id="miCrop" data-i18n="menu.crop" data-i18n-title="menu.crop.title"></button>
         </div>
         <hr role="separator">
         <button role="menuitem" id="miJpeg" disabled data-i18n="menu.saveJpeg" data-i18n-title="menu.saveJpeg.title"></button>
@@ -114,6 +115,10 @@
   <button id="moveBtn" class="mv" hidden data-i18n-title="tool.moveShape.title" data-i18n-aria-label="tool.moveShape.label"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></button>
   <button id="hA" class="mv hd" hidden></button>
   <button id="hB" class="mv hd" hidden></button>
+  <button id="cropA" class="mv hd" hidden data-i18n-title="crop.handle.title" data-i18n-aria-label="crop.handle.label"><svg viewBox="0 0 24 24"><path d="M5 5l14 14M5 5h6M5 5v6M19 19h-6M19 19v-6"/></svg></button>
+  <button id="cropB" class="mv hd" hidden data-i18n-title="crop.handle.title" data-i18n-aria-label="crop.handle.label"><svg viewBox="0 0 24 24"><path d="M5 5l14 14M5 5h6M5 5v6M19 19h-6M19 19v-6"/></svg></button>
+  <button id="cropOk" class="mv ok" hidden data-i18n-title="crop.ok.title" data-i18n-aria-label="crop.ok.label"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></svg></button>
+  <button id="cropNo" class="mv ok no" hidden data-i18n-title="crop.cancel.title" data-i18n-aria-label="crop.cancel.label"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   <div id="hint"><span data-i18n="hint.start"></span><span data-i18n="hint.nav"></span></div>
   <div id="msg"></div>
   <div id="dim" data-i18n-aria-label="app.imageSizeLabel"></div>
