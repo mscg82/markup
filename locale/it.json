@@ -153,9 +153,5 @@
   "confirm.snapDelete": "Eliminare lo snapshot \"{name}\"?",
   "menu.snapList": "Snapshot esistenti",
   "menu.snapList.title": "Elenca gli snapshot salvati per ripristinarli o eliminarli",
-  "width.valueLabel": "Spessore della linea in pixel (digita un valore da 1 a 80)",
-  "menu.fullscreen": "Schermo intero",
-  "menu.exitFullscreen": "Esci da schermo intero",
-  "menu.fullscreen.title": "Mostra l'applicazione a schermo intero, o esci",
-  "msg.fullscreenFail": "Lo schermo intero non è disponibile."
+  "width.valueLabel": "Spessore della linea in pixel (digita un valore da 1 a 80)"
 }

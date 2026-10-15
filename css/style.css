@@ -195,4 +195,3 @@ html.tb-left #menuList,html.tb-left #shapesList,html.tb-left #widthPop{position:
 .wnum{width:3.4em;flex:none;text-align:center;background:#394147;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:0 4px;min-height:36px;font:inherit;font-variant-numeric:tabular-nums}
 .wnum:focus{outline:2px solid var(--acc);outline-offset:0}
 .wnum.bad{border-color:#e5484d;outline:2px solid #e5484d;color:#ffb4b6}
-#menuList button[hidden]{display:none}
