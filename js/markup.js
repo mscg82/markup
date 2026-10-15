@@ -26,7 +26,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v26';   // keep in step with CACHE in sw.js
+const APP_VERSION='v27';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -178,21 +178,22 @@ function applyFrame(o){   // enlarge the background (new area filled with o.c) a
 }
 // Bicubic resampling (Keys kernel, a = -0.5, the same as Pillow's BICUBIC): two separable passes. When the image is
 // reduced the kernel is stretched by the scale factor, so shrinking is smooth instead of aliased.
+const lanczos=x=>{x=Math.abs(x);if(x<1e-8)return 1;if(x>=3)return 0;const px=Math.PI*x;return 3*Math.sin(px)*Math.sin(px/3)/(px*px)};
 const cubic=x=>{x=Math.abs(x);return x<1?(1.5*x-2.5)*x*x+1:x<2?((-0.5*x+2.5)*x-4)*x+2:0};
-function cubicWeights(srcN,dstN){
-  const sc=srcN/dstN,fs=Math.max(1,sc),support=2*fs,out=new Array(dstN);
+function cubicWeights(srcN,dstN,lz){
+  const kern=lz?lanczos:cubic,sc=srcN/dstN,fs=Math.max(1,sc),support=(lz?3:2)*fs,out=new Array(dstN);
   for(let i=0;i<dstN;i++){
     const c=(i+0.5)*sc,x0=Math.max(0,Math.floor(c-support+0.5)),x1=Math.min(srcN,Math.floor(c+support+0.5)),w=new Float32Array(Math.max(1,x1-x0));
     let sum=0;
-    for(let x=x0;x<x1;x++){const v=cubic((x-c+0.5)/fs);w[x-x0]=v;sum+=v}
+    for(let x=x0;x<x1;x++){const v=kern((x-c+0.5)/fs);w[x-x0]=v;sum+=v}
     if(sum)for(let k=0;k<w.length;k++)w[k]/=sum;else w[0]=1;
     out[i]={x0,w};
   }
   return out;
 }
-function resampleCanvas(src,dw,dh){
+function resampleCanvas(src,dw,dh,sharp){   // sharp: 0 = bicubic as before, 1/2 = Lanczos-3 + limited sharpening (normal / strong)
   const sw=src.width,sh=src.height,sd=src.getContext('2d').getImageData(0,0,sw,sh).data;
-  const tmp=new Uint8ClampedArray(dw*sh*4),wx=cubicWeights(sw,dw),wy=cubicWeights(sh,dh);
+  const tmp=new Uint8ClampedArray(dw*sh*4),wx=cubicWeights(sw,dw,sharp>0),wy=cubicWeights(sh,dh,sharp>0);
   for(let y=0;y<sh;y++){                       // horizontal pass
     const row=y*sw*4;
     for(let i=0;i<dw;i++){
@@ -211,12 +212,40 @@ function resampleCanvas(src,dw,dh){
       const o=(j*dw+i)*4;od[o]=r;od[o+1]=g;od[o+2]=b;od[o+3]=a;
     }
   }
+  if(sharp>0){const f=Math.max(sw/dw,sh/dh),amt=(sharp===2?1:0.6)*Math.min(1,(f-1)*2);if(amt>0)unsharp(od,dw,dh,amt)}   // only when reducing
   oc.putImageData(img,0,0);
   return out;
 }
+// Unsharp mask (Gaussian sigma ~0.7 px) whose result is clamped to the min/max of each pixel's 3x3 neighbourhood, so it
+// restores edge contrast (text) without halos or ringing. Alpha is left alone.
+function unsharp(d,w,h,amt){
+  const K=[0.0702,0.2311,0.3974,0.2311,0.0702];   // 5-tap Gaussian
+  const n=w*h*4,tmp=new Float32Array(n),bl=new Float32Array(n);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const o=(y*w+x)*4;
+    for(let c=0;c<3;c++){let a=0;for(let k=-2;k<=2;k++){const xx=Math.min(w-1,Math.max(0,x+k));a+=d[(y*w+xx)*4+c]*K[k+2]}tmp[o+c]=a}
+  }
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const o=(y*w+x)*4;
+    for(let c=0;c<3;c++){let a=0;for(let k=-2;k<=2;k++){const yy=Math.min(h-1,Math.max(0,y+k));a+=tmp[(yy*w+x)*4+c]*K[k+2]}bl[o+c]=a}
+  }
+  const src=new Uint8ClampedArray(d);                // untouched copy for the neighbourhood limits
+  for(let y=0;y<h;y++){
+    const y0=Math.max(0,y-1),y1=Math.min(h-1,y+1);
+    for(let x=0;x<w;x++){
+      const x0=Math.max(0,x-1),x1=Math.min(w-1,x+1),o=(y*w+x)*4;
+      for(let c=0;c<3;c++){
+        let lo=255,hi=0;
+        for(let yy=y0;yy<=y1;yy++)for(let xx=x0;xx<=x1;xx++){const v=src[(yy*w+xx)*4+c];if(v<lo)lo=v;if(v>hi)hi=v}
+        const v=src[o+c],r=v+amt*(v-bl[o+c]);
+        d[o+c]=r<lo?lo:r>hi?hi:r;
+      }
+    }
+  }
+}
 let scaleCache=null;   // replay() runs on every undo: remember the last resampled background instead of recomputing it
 function applyScale(o){   // "scale" operation: the background is resampled to o.w x o.h (it is only created when the history is empty)
-  if(!(scaleCache&&scaleCache.src===bg&&scaleCache.w===o.w&&scaleCache.h===o.h))scaleCache={src:bg,w:o.w,h:o.h,c:resampleCanvas(bg,o.w,o.h)};
+  if(!(scaleCache&&scaleCache.src===bg&&scaleCache.w===o.w&&scaleCache.h===o.h&&scaleCache.s===(o.s|0)))scaleCache={src:bg,w:o.w,h:o.h,s:o.s|0,c:resampleCanvas(bg,o.w,o.h,o.s|0)};
   const nb=scaleCache.c;
   const old=L;newLayer(o.w,o.h);lc.imageSmoothingQuality='high';lc.drawImage(old,0,0,o.w,o.h);
   bg=nb;
@@ -744,7 +773,7 @@ function exportStatus(name){
 const num=v=>typeof v==='number'&&isFinite(v);
 const pt=p=>Array.isArray(p)&&p.length===2&&num(p[0])&&num(p[1]);
 function validOp(o){
-  if(o&&o.t==='scale')return Number.isInteger(o.w)&&Number.isInteger(o.h)&&o.w>=1&&o.h>=1&&o.w<=MAXDIM&&o.h<=MAXDIM;
+  if(o&&o.t==='scale')return (o.s===undefined||o.s===0||o.s===1||o.s===2)&&Number.isInteger(o.w)&&Number.isInteger(o.h)&&o.w>=1&&o.h>=1&&o.w<=MAXDIM&&o.h<=MAXDIM;
   if(o&&o.t==='frame')return [o.top,o.right,o.bottom,o.left].every(v=>Number.isInteger(v)&&v>=0&&v<=MAXDIM)&&typeof o.c==='string'&&/^#[0-9a-f]{6}$/i.test(o.c);
   if(o&&o.t==='fill')return typeof o.c==='string'&&num(o.x)&&num(o.y)&&num(o.tol);
   if(!o||typeof o!=='object'||!num(o.w)||typeof o.c!=='string')return false;
@@ -1132,7 +1161,7 @@ function createEmptyImage(){
 $('newOk').onclick=createEmptyImage;
 $('newCancel').onclick=()=>newDlg.close();
 /* ---------- resize background ---------- */
-// Scales the background (bicubic) to new dimensions. Only possible when the history is empty, because the
+// Scales the background (bicubic, or Lanczos with sharpening) to new dimensions. Only possible when the history is empty, because the
 // operations already drawn are in the coordinates of the current size; the scaling itself is a "scale"
 // operation in the history, so it can be undone and redone.
 const scaleDlg=$('scaleDlg');
@@ -1146,7 +1175,7 @@ function openScaleDialog(){
   if(!bg)return;
   if(ops.length||pending){alert(t('scaledlg.needClear'));return}   // the history must be empty
   scaleRatio=bg.width/bg.height;
-  $('scW').value=bg.width;$('scH').value=bg.height;$('scKeep').checked=true;$('scaleErr').hidden=true;
+  $('scW').value=bg.width;$('scH').value=bg.height;$('scKeep').checked=true;$('scSharp').value='1';$('scaleErr').hidden=true;
   $('scaleCur').textContent=t('scaledlg.current',{w:bg.width,h:bg.height});
   scaleDlg.showModal();
   $('scaleTitle').focus({preventScroll:true});   // no on-screen keyboard
@@ -1155,7 +1184,7 @@ function applyScaleDialog(){
   const v=scaleValues();
   if(!v||!v.every(x=>x>=16&&x<=MAXDIM)){$('scaleErr').textContent=t('scaledlg.err',{min:16,max:MAXDIM});$('scaleErr').hidden=false;return}
   if(v[0]===bg.width&&v[1]===bg.height){$('scaleErr').textContent=t('scaledlg.same');$('scaleErr').hidden=false;return}
-  const o={t:'scale',w:v[0],h:v[1]};
+  const o={t:'scale',w:v[0],h:v[1],s:(+$('scSharp').value)};
   scaleDlg.close();
   ops.push(o);redoStack=[];applyScale(o);persist();ui();fit();
   msg(t('msg.scaled',{w:o.w,h:o.h}));

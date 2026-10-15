@@ -170,5 +170,10 @@
   "settings.palm": "Palm rejection (stylus on touch screens)",
   "settings.palmMs": "Second-touch window (ms)",
   "settings.palmNote": "Ignores a hand resting on the screen while you use a stylus. A second finger must land within the window of the first, so pinching still works; a much smaller late touch means the first was a palm. A slow pinch may be ignored.",
-  "settings.help": "Show explanation"
+  "settings.help": "Show explanation",
+  "scaledlg.sharp": "Sharpness",
+  "scaledlg.sharp0": "Off (smooth bicubic)",
+  "scaledlg.sharp1": "Normal (Lanczos)",
+  "scaledlg.sharp2": "Strong (Lanczos)",
+  "scaledlg.sharpNote": "Normal and Strong keep text and thin lines crisper when the image is reduced. They have no effect when it is enlarged."
 }
