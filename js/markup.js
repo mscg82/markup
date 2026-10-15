@@ -3,6 +3,7 @@ const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
 let bg=null,bg0=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,viewW=0,viewH=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
+let lastSharp=1;   // sharpness used by the last Resize background (0 off, 1 normal, 2 strong); remembered with the pen widths
 let crop=null;   // crop selection {x0,y0,x1,y1} in image pixels while the crop mode is active
 const ptrs=new Map();let pinch=null,last=null,fillTap=null,tapTrack=null;
 let pending=null;   // rectangle/circle/star that has been drawn but not placed yet (see "pending shape" below)
@@ -637,13 +638,14 @@ function syncWidth(){
 }
 function setWidth(v){widths[tool==='erase'?'erase':'draw']=v;if(tool==='erase')render();if(pending&&tool!=='erase'){pending.w=v;render()}syncWidth();savePrefs()}
 const PK='markup.prefs';
-function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,draw:widths.draw,erase:widths.erase}))}catch(e){}}
+function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,draw:widths.draw,erase:widths.erase,sharp:lastSharp}))}catch(e){}}
 try{
   const p=JSON.parse(localStorage.getItem(PK)||'null');
   if(p){
     if(/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
     if(p.draw>=1&&p.draw<=80)widths.draw=(+p.draw);
     if(p.erase>=1&&p.erase<=80)widths.erase=(+p.erase);
+    if(p.sharp===0||p.sharp===1||p.sharp===2)lastSharp=p.sharp;
   }
 }catch(e){}
 syncWidth();
@@ -1211,7 +1213,7 @@ function openScaleDialog(){
   if(!bg)return;
   if(ops.some(o=>!isResizeOp(o))||pending){alert(t('scaledlg.needClear'));return}   // only resize operations may precede it
   scaleRatio=bg.width/bg.height;
-  $('scW').value=bg.width;$('scH').value=bg.height;$('scKeep').checked=true;$('scSharp').value='1';$('scaleErr').hidden=true;
+  $('scW').value=bg.width;$('scH').value=bg.height;$('scKeep').checked=true;$('scSharp').value=String(lastSharp);$('scaleErr').hidden=true;
   $('scaleCur').textContent=t('scaledlg.current',{w:bg.width,h:bg.height});
   scaleDlg.showModal();
   $('scaleTitle').focus({preventScroll:true});   // no on-screen keyboard
@@ -1221,6 +1223,7 @@ function applyScaleDialog(){
   if(!v||!v.every(x=>x>=16&&x<=MAXDIM)){$('scaleErr').textContent=t('scaledlg.err',{min:16,max:MAXDIM});$('scaleErr').hidden=false;return}
   if(v[0]===bg.width&&v[1]===bg.height){$('scaleErr').textContent=t('scaledlg.same');$('scaleErr').hidden=false;return}
   const o={t:'scale',w:v[0],h:v[1],s:(+$('scSharp').value)};
+  lastSharp=o.s;savePrefs();
   scaleDlg.close();
   ops.push(o);redoStack=[];applyResizeOp(o);syncBgCache();persist();ui();fit();
   msg(t('msg.scaled',{w:o.w,h:o.h}));
