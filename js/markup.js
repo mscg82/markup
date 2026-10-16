@@ -4,7 +4,8 @@ const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
 let bg=null,bg0=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,viewW=0,viewH=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
 let lastSharp=1;   // sharpness used by the last Resize background (0 off, 1 normal, 2 strong); remembered with the pen widths
-let crop=null;   // crop selection {x0,y0,x1,y1} in image pixels while the crop mode is active
+let crop=null,spot=null;   // spot: the floating spotlight box {x,y,collapsed} while one exists
+let cropKind='crop';   // crop selection {x0,y0,x1,y1} in image pixels while the crop mode is active
 const ptrs=new Map();let pinch=null,last=null,fillTap=null,tapTrack=null;
 let pending=null;   // rectangle/circle/star that has been drawn but not placed yet (see "pending shape" below)
 const MAXDIM=2400;
@@ -28,7 +29,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v28';   // keep in step with CACHE in sw.js
+const APP_VERSION='v29';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -294,13 +295,13 @@ function resize(){
     const ix=(viewW/2-ox)/s,iy=(viewH/2-oy)/s;
     ox=r.width/2-ix*s;oy=r.height/2-iy*s;
   }
-  viewW=r.width;viewH=r.height;
+  viewW=r.width;viewH=r.height;clampSpot();
   cv.width=Math.round(r.width*d);cv.height=Math.round(r.height*d);render();
 }
 function render(){
   const d=devicePixelRatio||1;
   ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#1f2326';ctx.fillRect(0,0,cv.width,cv.height);
-  if(!bg){crop=null;positionCrop();return}
+  if(!bg){crop=null;dropSpot();positionCrop();return}
   ctx.setTransform(d*s,0,0,d*s,d*ox,d*oy);
   ctx.imageSmoothingQuality='high';
   ctx.drawImage(bg,0,0);ctx.drawImage(L,0,0);
@@ -323,6 +324,7 @@ function render(){
     ctx.strokeStyle='#fff';ctx.lineWidth=1/s;ctx.strokeRect(x0,y0,x1-x0,y1-y0);
   }
   positionMove();positionCrop();
+  if(spot)scheduleSpot();
 }
 function fit(){
   if(!bg)return;const r=stage.getBoundingClientRect();
@@ -606,7 +608,7 @@ cv.addEventListener('wheel',e=>{
 /* ---------- UI ---------- */
 function ui(){
   showSize();
-  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miResize').disabled=!bg;$('miExport').disabled=!bg;$('miSnapNew').disabled=!bg;$('clear').disabled=!bg;
+  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miResize').disabled=!bg;$('miSpot').disabled=!bg||!!spot;$('miExport').disabled=!bg;$('miSnapNew').disabled=!bg;$('clear').disabled=!bg;
   $('hint').style.display=bg?'none':'flex';
 }
 // The last drawing tool used before the eraser (not Move, not the eraser itself). Choosing a color while the
@@ -752,7 +754,7 @@ function setBackground(img){
   const k=Math.min(1,MAXDIM/Math.max(img.width,img.height));
   const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
   const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
-  crop=null;bg=bg0=c;newLayer(c.width,c.height);showSize();
+  crop=null;dropSpot();bg=bg0=c;newLayer(c.width,c.height);showSize();
 }
 $('file').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
@@ -1011,6 +1013,7 @@ function deleteSnapshot(id){
   $('miFrame').onclick=()=>{close();openFrameDialog()};
   $('miScale').onclick=()=>{close();openScaleDialog()};
   $('miCrop').onclick=()=>{close();openCrop()};
+  $('miSpot').onclick=()=>{close();openSpot()};
   $('miOpen').onclick=()=>{close();$('file').click()};
   $('miEmpty').onclick=()=>{close();openNewDialog()};
   $('miSnapNew').onclick=()=>{close();commitPending();openSnapDialog()};
@@ -1292,7 +1295,13 @@ const cropA=$('cropA'),cropB=$('cropB'),cropOk=$('cropOk'),cropNo=$('cropNo');
 function openCrop(){
   if(!bg)return;
   if(ops.some(o=>!isResizeOp(o))||pending){alert(t('crop.needClear'));return}
-  crop={x0:0,y0:0,x1:bg.width,y1:bg.height};render();msg(t('crop.hint'));
+  startSelect('crop');
+}
+function startSelect(kind){   // the same rectangle selector serves the crop and the spotlight
+  cropKind=kind;
+  cropOk.title=t(kind==='spot'?'spot.ok.title':'crop.ok.title');cropOk.setAttribute('aria-label',t(kind==='spot'?'spot.ok.label':'crop.ok.label'));
+  const f=kind==='spot'?1/3:1;   // the spotlight starts as a third of the image, at its top-left corner; the crop as the whole image
+  crop={x0:0,y0:0,x1:Math.max(1,Math.round(bg.width*f)),y1:Math.max(1,Math.round(bg.height*f))};render();msg(t(kind==='spot'?'spot.hint':'crop.hint'));
 }
 function cancelCrop(){if(crop){crop=null;render()}}
 function positionCrop(){
@@ -1326,6 +1335,7 @@ for(const [h,which] of [[cropA,0],[cropB,1]]){
 cropOk.onclick=()=>{
   if(!crop)return;
   const x=Math.round(crop.x0),y=Math.round(crop.y0),w=Math.round(crop.x1)-x,h=Math.round(crop.y1)-y;
+  if(cropKind==='spot'){crop=null;createSpot(x,y,w,h);return}
   if(x===0&&y===0&&w===bg.width&&h===bg.height){msg(t('crop.same'));return}
   const o={t:'crop',x,y,w,h};crop=null;
   ops.push(o);redoStack=[];applyResizeOp(o);syncBgCache();persist();ui();fit();
@@ -1333,6 +1343,104 @@ cropOk.onclick=()=>{
 };
 cropNo.onclick=cancelCrop;   // touch devices have no Escape key
 addEventListener('keydown',e=>{if(e.key==='Escape'&&crop&&!(e.target.closest&&e.target.closest('dialog')))cancelCrop()});
+
+/* ---------- spotlight ---------- */
+// A live view of a part of the image (background + drawing + the shape being drawn) in a floating box over the canvas.
+// The view follows the changes made to that part, and follows the part itself through the resize operations (frame,
+// scale, crop) of the history. The box does not take part in the drawing, zoom or pan, it is not in the history, in
+// exported status or in snapshots, and there is only one at a time. Move / roll up / close buttons sit in its top-right corner.
+const spotBox=$('spot'),spotCv=$('spotCv'),spMove=$('spMove'),spCol=$('spCol'),spClose=$('spClose');
+const SP_ICON={move:'<svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>',
+  up:'<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>',down:'<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>'};
+function openSpot(){
+  if(!bg||spot)return;
+  commitPending();startSelect('spot');
+}
+function setSpotPos(x,y){
+  const W=stage.clientWidth,H=stage.clientHeight;
+  spot.x=Math.min(Math.max(x,0),Math.max(0,W-spotBox.offsetWidth));spot.y=Math.min(Math.max(y,0),Math.max(0,H-spotBox.offsetHeight));
+  spotBox.style.left=spot.x+'px';spotBox.style.top=spot.y+'px';
+}
+function spotLabels(){
+  spCol.innerHTML=SP_ICON[spot&&spot.collapsed?'down':'up'];
+  const k=spot&&spot.collapsed?'spot.expand':'spot.collapse';spCol.title=t(k+'.title');spCol.setAttribute('aria-label',t(k+'.title'));
+}
+// The resize operations of the history, cached. The spotlight only survives frame resizes: it follows the image
+// content through them (and through their undo / redo); any other resize operation, or a new background, closes it.
+let chainCache=null;
+function resizeChain(){
+  const c=chainCache,last=ops[ops.length-1];
+  if(c&&c.arr===ops&&c.len===ops.length&&c.last===last)return c.list;
+  const list=ops.filter(isResizeOp);
+  chainCache={arr:ops,len:ops.length,last,list};return list;
+}
+function spotRect(){   // where the watched part of the image is now (null: the spotlight had to be closed)
+  const cur=resizeChain();
+  if(spot.chain===cur)return spot.rect;
+  const ref=spot.ref;let p=0;while(p<ref.length&&p<cur.length&&ref[p]===cur[p])p++;
+  let dx=0,dy=0;
+  for(let i=ref.length-1;i>=p;i--){if(ref[i].t!=='frame'){dropSpot();return null}dx-=ref[i].left;dy-=ref[i].top}   // frames no longer in the history
+  for(let i=p;i<cur.length;i++){if(cur[i].t!=='frame'){dropSpot();return null}dx+=cur[i].left;dy+=cur[i].top}      // frames added since
+  spot.chain=cur;spot.rect={x:spot.base.x+dx,y:spot.base.y+dy,w:spot.base.w,h:spot.base.h};return spot.rect;
+}
+let spotRaf=0;
+function scheduleSpot(){if(!spotRaf)spotRaf=requestAnimationFrame(()=>{spotRaf=0;drawSpot()})}   // render() asks for it; at most one redraw per frame
+function drawSpot(){
+  if(!spot||spot.collapsed||!bg)return;
+  if(spot.bg0!==bg0){dropSpot();return}
+  const r=spotRect();if(!r)return;
+  const c=spotCv.getContext('2d'),cw=spotCv.width,ch=spotCv.height,kx=cw/r.w,ky=ch/r.h;
+  c.setTransform(1,0,0,1,0,0);c.fillStyle='#1f2326';c.fillRect(0,0,cw,ch);   // outside the image
+  c.imageSmoothingQuality='high';
+  const ix0=Math.max(0,r.x),iy0=Math.max(0,r.y),ix1=Math.min(bg.width,r.x+r.w),iy1=Math.min(bg.height,r.y+r.h);
+  if(ix1>ix0&&iy1>iy0){
+    const sw=ix1-ix0,sh=iy1-iy0,dx=(ix0-r.x)*kx,dy=(iy0-r.y)*ky;
+    c.drawImage(bg,ix0,iy0,sw,sh,dx,dy,sw*kx,sh*ky);c.drawImage(L,ix0,iy0,sw,sh,dx,dy,sw*kx,sh*ky);
+  }
+  if((cur&&!(cur.t==='pen'||cur.t==='erase'))||pending){   // shapes still being drawn or placed
+    c.setTransform(kx,0,0,ky,-r.x*kx,-r.y*ky);
+    if(cur&&!(cur.t==='pen'||cur.t==='erase'))drawOp(c,cur);
+    if(pending)drawOp(c,pending);
+  }
+}
+function createSpot(x,y,w,h){
+  const W=stage.clientWidth,H=stage.clientHeight;   // shown as large as it looks on screen now, kept within the stage
+  let k=s;
+  k=Math.max(k,110/w,44/h);k=Math.min(k,(W*0.8)/w,(H*0.8)/h);
+  const cw=Math.max(1,Math.round(w*k)),ch=Math.max(1,Math.round(h*k)),d=Math.min(2,devicePixelRatio||1);
+  spotCv.style.width=cw+'px';spotCv.style.height=ch+'px';spotCv.width=Math.round(cw*d);spotCv.height=Math.round(ch*d);
+  spot={x:0,y:0,collapsed:false,bg0,ref:resizeChain(),base:{x,y,w,h},chain:null,rect:null};
+  spotBox.classList.remove('collapsed');spotBox.hidden=false;
+  spMove.innerHTML=SP_ICON.move;spClose.innerHTML='<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';spotLabels();
+  setSpotPos((W-spotBox.offsetWidth)/2,(H-spotBox.offsetHeight)/2);
+  drawSpot();ui();render();
+}
+function closeSpot(){
+  if(!spot)return;
+  if(!confirm(t('spot.confirmClose')))return;
+  dropSpot();
+}
+function dropSpot(){   // removes the spotlight without asking (used when the image it watches goes away)
+  if(!spot)return;
+  spot=null;spotBox.hidden=true;spotCv.width=spotCv.height=1;ui();
+}
+function toggleSpot(){
+  if(!spot)return;
+  const right=spot.x+spotBox.offsetWidth;
+  spot.collapsed=!spot.collapsed;spotBox.classList.toggle('collapsed',spot.collapsed);spotLabels();
+  setSpotPos(right-spotBox.offsetWidth,spot.y);   // the right edge stays where it was
+  if(!spot.collapsed)drawSpot();
+}
+function clampSpot(){if(spot)setSpotPos(spot.x,spot.y)}
+let spDrag=null;
+spMove.addEventListener('pointerdown',e=>{if(!spot)return;e.preventDefault();spMove.setPointerCapture(e.pointerId);spDrag={id:e.pointerId,x:e.clientX,y:e.clientY,bx:spot.x,by:spot.y}});
+spMove.addEventListener('pointermove',e=>{if(spDrag&&spDrag.id===e.pointerId&&spot)setSpotPos(spDrag.bx+e.clientX-spDrag.x,spDrag.by+e.clientY-spDrag.y)});
+const spEnd=e=>{if(spDrag&&spDrag.id===e.pointerId)spDrag=null};
+spMove.addEventListener('pointerup',spEnd);spMove.addEventListener('pointercancel',spEnd);
+spCol.onclick=toggleSpot;spClose.onclick=closeSpot;
+spMove.title=t('spot.move.title');spMove.setAttribute('aria-label',t('spot.move.title'));
+spClose.title=t('spot.close.title');spClose.setAttribute('aria-label',t('spot.close.title'));
+spotBox.setAttribute('aria-label',t('spot.box.label'));
 
 /* ---------- file names (Save JPEG / Export status) ---------- */
 // The last name used is remembered separately for each action; it is forgotten

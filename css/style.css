@@ -213,3 +213,16 @@ html.tb-left #menuList,html.tb-left #shapesList,html.tb-left #widthPop{position:
 #diagPanel button{min-height:30px;padding:2px 8px;font-size:12px}
 #diagPanel .dg-sum{color:#9db0bd;margin:3px 0}
 #diagPanel .dg-h{margin-top:4px;color:var(--acc);font-family:system-ui,sans-serif;font-size:11px}
+
+/* spotlight: a floating, immutable picture over the canvas */
+#spot{position:absolute;z-index:7;left:0;top:0;border:3px solid var(--acc);border-radius:8px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.7),0 8px 26px rgba(0,0,0,.6);touch-action:none;overflow:hidden}
+#spot[hidden]{display:none}
+#spot canvas{position:static;inset:auto;display:block;pointer-events:none}
+.sp-col{position:absolute;top:4px;right:4px;display:flex;flex-direction:row;gap:4px}
+#spot.collapsed{background:rgba(31,35,38,.92)}
+#spot.collapsed canvas{display:none}
+#spot.collapsed .sp-col{position:static;padding:4px}
+.spb{width:28px;height:28px;min-width:0;min-height:0;padding:0;justify-content:center;border-radius:50%;background:rgba(31,35,38,.88);color:#fff;border:1px solid rgba(255,255,255,.55);touch-action:none;cursor:pointer}
+.spb:hover{background:#000}
+.spb svg{width:16px;height:16px}
+#spMove{cursor:grab}

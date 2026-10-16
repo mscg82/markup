@@ -187,5 +187,16 @@
   "crop.ok.label": "Confirm crop",
   "msg.cropped": "Background cropped: the image is now {w} × {h} px.",
   "crop.cancel.title": "Cancel the crop",
-  "crop.cancel.label": "Cancel crop"
+  "crop.cancel.label": "Cancel crop",
+  "menu.spot": "Spotlight",
+  "menu.spot.title": "Show a selected area of the image in a floating box",
+  "spot.hint": "Drag the two corner handles to choose the area, then tap the check mark to make the spotlight.",
+  "spot.ok.title": "Create the spotlight from this area",
+  "spot.ok.label": "Confirm spotlight",
+  "spot.move.title": "Move the spotlight",
+  "spot.collapse.title": "Roll up the spotlight",
+  "spot.expand.title": "Expand the spotlight",
+  "spot.close.title": "Close the spotlight",
+  "spot.box.label": "Spotlight",
+  "spot.confirmClose": "Close the spotlight? Its picture will be lost."
 }

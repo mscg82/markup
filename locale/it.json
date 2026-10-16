@@ -187,5 +187,16 @@
   "crop.ok.label": "Conferma ritaglio",
   "msg.cropped": "Sfondo ritagliato: l'immagine ora è {w} × {h} px.",
   "crop.cancel.title": "Annulla il ritaglio",
-  "crop.cancel.label": "Annulla ritaglio"
+  "crop.cancel.label": "Annulla ritaglio",
+  "menu.spot": "Spotlight",
+  "menu.spot.title": "Mostra un'area selezionata dell'immagine in un riquadro flottante",
+  "spot.hint": "Trascina i due angoli per scegliere l'area, poi tocca il segno di spunta per creare lo spotlight.",
+  "spot.ok.title": "Crea lo spotlight da quest'area",
+  "spot.ok.label": "Conferma spotlight",
+  "spot.move.title": "Sposta lo spotlight",
+  "spot.collapse.title": "Riduci a icona lo spotlight",
+  "spot.expand.title": "Espandi lo spotlight",
+  "spot.close.title": "Chiudi lo spotlight",
+  "spot.box.label": "Spotlight",
+  "spot.confirmClose": "Chiudere lo spotlight? La sua immagine andrà persa."
 }
