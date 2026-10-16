@@ -215,7 +215,7 @@ html.tb-left #menuList,html.tb-left #shapesList,html.tb-left #widthPop{position:
 #diagPanel .dg-h{margin-top:4px;color:var(--acc);font-family:system-ui,sans-serif;font-size:11px}
 
 /* spotlight: a floating, immutable picture over the canvas */
-#spot{position:absolute;z-index:7;left:0;top:0;border:3px solid var(--acc);border-radius:8px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.7),0 8px 26px rgba(0,0,0,.6);touch-action:none;overflow:hidden}
+#spot{position:absolute;z-index:7;left:0;top:0;outline:3px solid var(--acc);outline-offset:0;border-radius:5px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.7),0 8px 26px rgba(0,0,0,.6);touch-action:none;overflow:hidden}
 #spot[hidden]{display:none}
 #spot canvas{position:static;inset:auto;display:block;pointer-events:none}
 .sp-col{position:absolute;top:4px;right:4px;display:flex;flex-direction:row;gap:4px}

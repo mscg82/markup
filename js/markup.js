@@ -29,7 +29,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v29';   // keep in step with CACHE in sw.js
+const APP_VERSION='v30';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -1349,6 +1349,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape'&&crop&&!(e.target.closest&&e.
 // The view follows the changes made to that part, and follows the part itself through the resize operations (frame,
 // scale, crop) of the history. The box does not take part in the drawing, zoom or pan, it is not in the history, in
 // exported status or in snapshots, and there is only one at a time. Move / roll up / close buttons sit in its top-right corner.
+const SP_RING=3;   // width of the coloured outline around the box (drawn outside it, so the box has exactly the picture's size)
 const spotBox=$('spot'),spotCv=$('spotCv'),spMove=$('spMove'),spCol=$('spCol'),spClose=$('spClose');
 const SP_ICON={move:'<svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>',
   up:'<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>',down:'<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>'};
@@ -1358,7 +1359,7 @@ function openSpot(){
 }
 function setSpotPos(x,y){
   const W=stage.clientWidth,H=stage.clientHeight;
-  spot.x=Math.min(Math.max(x,0),Math.max(0,W-spotBox.offsetWidth));spot.y=Math.min(Math.max(y,0),Math.max(0,H-spotBox.offsetHeight));
+  spot.x=Math.min(Math.max(x,SP_RING),Math.max(SP_RING,W-SP_RING-spotBox.offsetWidth));spot.y=Math.min(Math.max(y,SP_RING),Math.max(SP_RING,H-SP_RING-spotBox.offsetHeight));
   spotBox.style.left=spot.x+'px';spotBox.style.top=spot.y+'px';
 }
 function spotLabels(){
@@ -1404,9 +1405,9 @@ function drawSpot(){
   }
 }
 function createSpot(x,y,w,h){
-  const W=stage.clientWidth,H=stage.clientHeight;   // shown as large as it looks on screen now, kept within the stage
+  const W=stage.clientWidth,H=stage.clientHeight;   // same size as the selection rectangle had on screen; only enlarged if too small for its buttons, or shrunk if it cannot fit the stage
   let k=s;
-  k=Math.max(k,110/w,44/h);k=Math.min(k,(W*0.8)/w,(H*0.8)/h);
+  k=Math.max(k,110/w,44/h);k=Math.min(k,(W-2*SP_RING)/w,(H-2*SP_RING)/h);
   const cw=Math.max(1,Math.round(w*k)),ch=Math.max(1,Math.round(h*k)),d=Math.min(2,devicePixelRatio||1);
   spotCv.style.width=cw+'px';spotCv.style.height=ch+'px';spotCv.width=Math.round(cw*d);spotCv.height=Math.round(ch*d);
   spot={x:0,y:0,collapsed:false,bg0,ref:resizeChain(),base:{x,y,w,h},chain:null,rect:null};
