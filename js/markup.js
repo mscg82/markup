@@ -4,6 +4,7 @@ const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
 let bg=null,bg0=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,viewW=0,viewH=0,cur=null,panning=false;
 const widths={draw:6,erase:24};
 let lastSharp=1;   // sharpness used by the last Resize background (0 off, 1 normal, 2 strong); remembered with the pen widths
+let viaSpot=false,spotId=null,spotPt=null;   // viaSpot: the pointer event being handled comes from the spotlight box; spotId: pointer drawing through it; spotPt: pointer position over it (its pixels) for the eraser footprint
 let crop=null,spot=null;   // spot: the floating spotlight box {x,y,collapsed} while one exists
 let cropKind='crop';   // crop selection {x0,y0,x1,y1} in image pixels while the crop mode is active
 const ptrs=new Map();let pinch=null,last=null,fillTap=null,tapTrack=null;
@@ -335,7 +336,13 @@ function zoomAt(f,px,py){
   const n=Math.min(40,Math.max(.05,s*f));
   ox=px-(px-ox)/s*n;oy=py-(py-oy)/s*n;s=n;render();
 }
-const toImg=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left-ox)/s,(e.clientY-r.top-oy)/s]};
+const toImg=e=>{
+  if(viaSpot){   // through the spotlight: its box shows spotRect() of the image, at its own scale
+    const r=spotCv.getBoundingClientRect(),q=spotRect()||{x:0,y:0,w:r.width,h:r.height};
+    return[q.x+(e.clientX-r.left)/r.width*q.w,q.y+(e.clientY-r.top)/r.height*q.h];
+  }
+  const r=cv.getBoundingClientRect();return[(e.clientX-r.left-ox)/s,(e.clientY-r.top-oy)/s];
+};
 const local=e=>{const r=cv.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]};
 
 /* ---------- temporary zoom / move (multi-tap and hold) ---------- */
@@ -380,33 +387,39 @@ function endTemp(){
 }
 
 /* ---------- pointer handling ---------- */
-cv.addEventListener('pointerdown',e=>{
+function onDown(e){   // pointer down on the canvas, or on the spotlight box (single pointer, drawing tools only)
+  viaSpot=e.currentTarget===spotCv;
   if(!bg)return;
+  if(viaSpot?(!spot||crop||ptrs.size>0||tool==='pan'||e.button!==0):spotId!==null)return;
   if(palmOn&&palmDown(e))return;
-  cv.setPointerCapture(e.pointerId);
+  if(viaSpot)spotId=e.pointerId;
+  (viaSpot?spotCv:cv).setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId,local(e));
   if(ptrs.size===2){fillTap=null;tapTrack=null;press=null;tapSeq.n=0;endTemp();cancelCur();startPinch();return}
   if(ptrs.size>2)return;
   if(crop){panning=true;last=local(e);setCursor();return}   // while cropping, a single touch only pans the view
-  if(e.button===0){
+  if(viaSpot){press=null;tapSeq.n=0}
+  else if(e.button===0){
     const now=performance.now();
     if(tapSeq.n>=1&&now-tapSeq.tEnd<=TAP_GAP&&e.pointerType===tapSeq.type&&Math.hypot(e.clientX-tapSeq.x,e.clientY-tapSeq.y)<=TAP_DIST){
       startTemp(e,tapSeq.n>=2?'move':'zoom');return;   // second press: zoom, third press: move
     }
     press={id:e.pointerId,t0:now,x:e.clientX,y:e.clientY,moved:false,redo:redoStack};
   }else press=null;
-  if(tool==='pan'||spaceDown||e.button===1||e.button===2){panning=true;last=local(e);setCursor();return}
+  if(!viaSpot&&(tool==='pan'||spaceDown||e.button===1||e.button===2)){panning=true;last=local(e);setCursor();return}
   if(tool==='fill'){fillTap={id:e.pointerId,p:toImg(e),sx:e.clientX,sy:e.clientY,c:$('color').value};return}   // applied on release
   if(pending){tapTrack={id:e.pointerId,sx:e.clientX,sy:e.clientY,p0:toImg(e)};return}   // a tap places the pending shape; a drag places it and starts a new one
-  if(tool==='erase')eraserPt=local(e);
+  if(tool==='erase')viaSpot?spotEraserAt(e):eraserPt=local(e);
   const p=toImg(e),w=tool==='erase'?widths.erase:widths.draw,c=$('color').value;
   if(tool==='pen'||tool==='erase'){cur={t:tool,c,w,p:[p]};drawOp(lc,cur);}
   else cur={t:tool,c,w,a:p,b:p};
   render();
-});
-cv.addEventListener('pointermove',e=>{
+}
+function onMove(e){
+  viaSpot=e.currentTarget===spotCv;
   if(palmOn&&palmRej.has(e.pointerId))return;
-  if(tool==='erase'&&bg){
+  if(tool==='erase'&&bg&&viaSpot)spotEraserAt(e);
+  else if(tool==='erase'&&bg){
     eraserPt=local(e);
     if(!ptrs.has(e.pointerId)&&!eraserRaf)eraserRaf=requestAnimationFrame(()=>{eraserRaf=0;render()});   // mouse hover: redraw once per frame
   }
@@ -441,15 +454,18 @@ cv.addEventListener('pointermove',e=>{
     }else cur.b=p;
   }
   render();
-});
+}
+cv.addEventListener('pointerdown',onDown);cv.addEventListener('pointermove',onMove);
 function end(e){
   if(palmOn&&palmRej.delete(e.pointerId))return;
+  if(e.pointerId===spotId)spotId=null;
   if(!ptrs.has(e.pointerId))return;
   if(palmOn)palmUp(e);
   ptrs.delete(e.pointerId);
   if(ptrs.size<2)pinch=null;
   const now=performance.now();
   if(e.pointerType!=='mouse'&&eraserPt){eraserPt=null;render()}   // a finger left the screen: no footprint any more
+  if(e.pointerType!=='mouse'&&spotPt){spotPt=null;scheduleSpot()}
   if(tmp&&tmp.id===e.pointerId){                   // end of a temporary zoom / move press
     const quick=e.type==='pointerup'&&!tmp.moved&&now-tmp.t0<=TAP_MAX_DUR,mode=tmp.mode;
     endTemp();
@@ -630,7 +646,7 @@ document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
     $('shapesIcon').innerHTML=b.querySelector('svg').outerHTML;
     $('shapesList').hidden=true;$('shapesBtn').setAttribute('aria-expanded','false');
   }
-  eraserPt=null;syncWidth();setCursor();render();   // render: the eraser outline disappears when another tool is chosen
+  eraserPt=null;spotPt=null;syncWidth();setCursor();render();   // render: the eraser outline disappears when another tool is chosen
 });
 function syncWidth(){
   const v=tool==='erase'?widths.erase:widths.draw;
@@ -733,7 +749,7 @@ $('zi').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(1.25,r.width/2,r.
 $('zo').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(.8,r.width/2,r.height/2)};
 $('fit').onclick=fit;
 let spaceDown=false;
-function setCursor(){cv.style.cursor=panning?'grabbing':tmp?'ns-resize':(tool==='pan'||spaceDown)?'grab':'crosshair'}
+function setCursor(){$('spotCv').style.cursor=tool==='pan'?'default':'crosshair';cv.style.cursor=panning?'grabbing':tmp?'ns-resize':(tool==='pan'||spaceDown)?'grab':'crosshair'}
 addEventListener('keydown',e=>{
   if(e.target.closest&&e.target.closest('dialog'))return;   // let dialogs handle their own keys
   if((e.ctrlKey||e.metaKey)&&!(e.target.tagName==='INPUT'&&e.target.type==='text')){   // in a text box Ctrl+Z edits the text
@@ -1398,6 +1414,13 @@ function drawSpot(){
     const sw=ix1-ix0,sh=iy1-iy0,dx=(ix0-r.x)*kx,dy=(iy0-r.y)*ky;
     c.drawImage(bg,ix0,iy0,sw,sh,dx,dy,sw*kx,sh*ky);c.drawImage(L,ix0,iy0,sw,sh,dx,dy,sw*kx,sh*ky);
   }
+  if(spotPt&&tool==='erase'){   // eraser footprint, like on the canvas: what a touch here would clean (the width is in image pixels)
+    const d=cw/Math.max(1,spotCv.clientWidth),rx=widths.erase/2*kx,ry=widths.erase/2*ky;
+    c.setTransform(1,0,0,1,0,0);c.beginPath();c.ellipse(spotPt[0],spotPt[1],rx,ry,0,0,Math.PI*2);
+    c.fillStyle='rgba(255,255,255,.35)';c.fill();
+    c.lineWidth=2*d;c.strokeStyle='rgba(255,255,255,.9)';c.stroke();
+    c.lineWidth=d;c.strokeStyle='rgba(0,0,0,.65)';c.stroke();
+  }
   if((cur&&!(cur.t==='pen'||cur.t==='erase'))||pending){   // shapes still being drawn or placed
     c.setTransform(kx,0,0,ky,-r.x*kx,-r.y*ky);
     if(cur&&!(cur.t==='pen'||cur.t==='erase'))drawOp(c,cur);
@@ -1423,7 +1446,7 @@ function closeSpot(){
 }
 function dropSpot(){   // removes the spotlight without asking (used when the image it watches goes away)
   if(!spot)return;
-  spot=null;spotBox.hidden=true;spotCv.width=spotCv.height=1;ui();
+  spot=null;spotPt=null;spotBox.hidden=true;spotCv.width=spotCv.height=1;ui();
 }
 function toggleSpot(){
   if(!spot)return;
@@ -1439,6 +1462,14 @@ spMove.addEventListener('pointermove',e=>{if(spDrag&&spDrag.id===e.pointerId&&sp
 const spEnd=e=>{if(spDrag&&spDrag.id===e.pointerId)spDrag=null};
 spMove.addEventListener('pointerup',spEnd);spMove.addEventListener('pointercancel',spEnd);
 spCol.onclick=toggleSpot;spClose.onclick=closeSpot;
+// Drawing through the box: the same handlers as the canvas, with the pointer position mapped through the box's view.
+spotCv.addEventListener('pointerdown',onDown);spotCv.addEventListener('pointermove',onMove);
+spotCv.addEventListener('pointerup',end);spotCv.addEventListener('pointercancel',end);
+function spotEraserAt(e){   // the pointer position in the box's own pixels, drawn by drawSpot()
+  const r=spotCv.getBoundingClientRect();
+  spotPt=[(e.clientX-r.left)/r.width*spotCv.width,(e.clientY-r.top)/r.height*spotCv.height];scheduleSpot();
+}
+spotCv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&spotPt&&!ptrs.size){spotPt=null;scheduleSpot()}});
 spMove.title=t('spot.move.title');spMove.setAttribute('aria-label',t('spot.move.title'));
 spClose.title=t('spot.close.title');spClose.setAttribute('aria-label',t('spot.close.title'));
 spotBox.setAttribute('aria-label',t('spot.box.label'));
