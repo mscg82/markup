@@ -198,5 +198,21 @@
   "spot.expand.title": "Espandi lo spotlight",
   "spot.close.title": "Chiudi lo spotlight",
   "spot.box.label": "Spotlight",
-  "spot.confirmClose": "Chiudere lo spotlight? La sua immagine andrà persa."
+  "spot.confirmClose": "Chiudere lo spotlight? La sua immagine andrà persa.",
+  "tool.stencils.label": "Stencil",
+  "tool.stencils.title": "Stencil – inserisce una figura già pronta",
+  "tool.stencilX.label": "Segno a X",
+  "tool.stencilX.title": "Segno a X – due tratti incrociati",
+  "tool.stencilCircle.label": "Cerchio",
+  "tool.stencilCircle.title": "Stencil a cerchio",
+  "tool.stencilTriangle.label": "Triangolo",
+  "tool.stencilTriangle.title": "Stencil a triangolo equilatero",
+  "tool.stencilSquare.label": "Quadrato",
+  "tool.stencilSquare.title": "Stencil a quadrato",
+  "tool.stencilLetter.label": "Lettera…",
+  "tool.stencilLetter.title": "Stencil a lettera – scegli il carattere",
+  "chardlg.title": "Stencil a lettera",
+  "chardlg.label": "Carattere da inserire",
+  "chardlg.ok": "Usa",
+  "chardlg.error": "Inserisci un solo carattere."
 }

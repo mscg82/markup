@@ -80,6 +80,16 @@
         <button role="menuitem" data-t="star" aria-pressed="false" data-i18n-title="tool.star.title"><svg viewBox="0 0 24 24"><path d="M12.0 2.8 L14.2 9.7 L21.5 9.7 L15.6 14.0 L17.9 20.9 L12.0 16.6 L6.1 20.9 L8.4 14.0 L2.5 9.7 L9.8 9.7 Z"/></svg><span data-i18n="tool.star.label"></span></button>
       </div>
     </div>
+    <div class="menu" id="stencilsMenu">
+      <button id="stencilsBtn" aria-haspopup="menu" aria-expanded="false" aria-pressed="false" data-i18n-aria-label="tool.stencils.label" data-i18n-title="tool.stencils.title"><span id="stencilsIcon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2.5"/><path d="M12.5 18l3-5.5 3 5.5z"/></svg></span></button>
+      <div id="stencilsList" role="menu" hidden>
+        <button role="menuitem" data-t="stencil" data-k="x" aria-pressed="false" data-i18n-title="tool.stencilX.title"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-width="3.4"/></svg><span data-i18n="tool.stencilX.label"></span></button>
+        <button role="menuitem" data-t="stencil" data-k="circle" aria-pressed="false" data-i18n-title="tool.stencilCircle.title"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" stroke-width="3"/></svg><span data-i18n="tool.stencilCircle.label"></span></button>
+        <button role="menuitem" data-t="stencil" data-k="tri" aria-pressed="false" data-i18n-title="tool.stencilTriangle.title"><svg viewBox="0 0 24 24"><path d="M12 4.5l8 14H4z" stroke-width="2.6"/></svg><span data-i18n="tool.stencilTriangle.label"></span></button>
+        <button role="menuitem" data-t="stencil" data-k="square" aria-pressed="false" data-i18n-title="tool.stencilSquare.title"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" stroke-width="3"/></svg><span data-i18n="tool.stencilSquare.label"></span></button>
+        <button role="menuitem" data-t="stencil" data-k="char" aria-pressed="false" data-i18n-title="tool.stencilLetter.title"><svg viewBox="0 0 24 24"><path d="M6 19L12 5l6 14M8.4 14h7.2" stroke-width="2.6"/></svg><span data-i18n="tool.stencilLetter.label"></span></button>
+      </div>
+    </div>
     <button data-t="erase" aria-pressed="false" data-i18n-title="tool.erase.title" data-i18n-aria-label="tool.erase.label"><svg viewBox="0 0 24 24"><path d="M3 16l9-9 6 6-7 7H6z"/><path d="M9 10l6 6"/><path d="M13 20h8"/></svg></button>
     </div>
   </div>
@@ -181,6 +191,13 @@
   <input id="snapInput" type="text" maxlength="60" spellcheck="false" autocomplete="off">
   <p id="snapErr" class="dlg-err" hidden></p>
   <div class="dlg-actions"><button id="snapCancel" type="button" data-i18n="common.cancel"></button><button id="snapOk" type="button" class="primary" data-i18n="snapdlg.save"></button></div>
+</dialog>
+<dialog id="charDlg" aria-labelledby="charTitle">
+  <h2 id="charTitle" tabindex="-1" data-i18n="chardlg.title"></h2>
+  <label class="dlg-label" for="charInput" data-i18n="chardlg.label"></label>
+  <input id="charInput" type="text" maxlength="4" spellcheck="false" autocomplete="off" autocapitalize="off" style="font-size:22px;text-align:center">
+  <p id="charErr" class="dlg-err" hidden></p>
+  <div class="dlg-actions"><button id="charCancel" type="button" data-i18n="common.cancel"></button><button id="charOk" type="button" class="primary" data-i18n="chardlg.ok"></button></div>
 </dialog>
 <dialog id="settingsDlg" aria-labelledby="setTitle">
   <h2 id="setTitle" data-i18n="settings.title"></h2>

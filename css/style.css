@@ -76,15 +76,23 @@ label.dlg-label{display:block}
 .name-row input{flex:1;min-width:0;color:var(--ink);font-size:14px}
 .dlg-ext{color:var(--mute)}
 
-/* shapes menu */
+/* shapes and stencils menus */
 #shapesBtn{position:relative}
+#stencilsBtn{position:relative}
 #shapesBtn::after{content:'';position:absolute;right:3px;bottom:3px;width:0;height:0;border-left:6px solid transparent;border-bottom:6px solid currentColor;opacity:.75}
+#stencilsBtn::after{content:'';position:absolute;right:3px;bottom:3px;width:0;height:0;border-left:6px solid transparent;border-bottom:6px solid currentColor;opacity:.75}
 #shapesIcon{display:inline-flex}
+#stencilsIcon{display:inline-flex}
 #shapesList{position:absolute;left:0;top:calc(100% + 4px);z-index:20;min-width:150px;background:var(--bar);border:1px solid var(--line);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+#stencilsList{position:absolute;left:0;top:calc(100% + 4px);z-index:20;min-width:150px;background:var(--bar);border:1px solid var(--line);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
 #shapesList[hidden]{display:none}
+#stencilsList[hidden]{display:none}
 #shapesList button{width:100%;gap:10px;justify-content:flex-start;text-align:left;background:transparent;border-color:transparent}
+#stencilsList button{width:100%;gap:10px;justify-content:flex-start;text-align:left;background:transparent;border-color:transparent}
 #shapesList button:hover{background:#445057}
+#stencilsList button:hover{background:#445057}
 #shapesList button[aria-pressed=true]{background:var(--acc);color:#1b1b1b;border-color:var(--acc)}
+#stencilsList button[aria-pressed=true]{background:var(--acc);color:#1b1b1b;border-color:var(--acc)}
 
 /* avoid a flash of empty labels while the locale file loads */
 html:not(.i18n-ready) body{visibility:hidden}
@@ -183,7 +191,7 @@ html.tb-left .row>button{justify-content:center}
 html.tb-left #mainMenu{justify-self:start}
 html.tb-left #mainMenu>button{width:auto}
 /* popups open to the right of the toolbar, in viewport coordinates (js/markup.js: placePopup) */
-html.tb-left #menuList,html.tb-left #shapesList,html.tb-left #widthPop{position:fixed;right:auto;max-height:calc(100vh - 12px);overflow-y:auto}
+html.tb-left #menuList,html.tb-left #shapesList,html.tb-left #stencilsList,html.tb-left #widthPop{position:fixed;right:auto;max-height:calc(100vh - 12px);overflow-y:auto}
 
 /* snapshots submenu */
 #snapPop{position:fixed;z-index:30;min-width:170px;max-width:calc(100vw - 12px);box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;background:var(--bar);border:1px solid var(--line);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;box-shadow:0 6px 18px rgba(0,0,0,.45)}

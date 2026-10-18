@@ -198,5 +198,21 @@
   "spot.expand.title": "Expand the spotlight",
   "spot.close.title": "Close the spotlight",
   "spot.box.label": "Spotlight",
-  "spot.confirmClose": "Close the spotlight? Its picture will be lost."
+  "spot.confirmClose": "Close the spotlight? Its picture will be lost.",
+  "tool.stencils.label": "Stencils",
+  "tool.stencils.title": "Stencils – place a ready-made figure",
+  "tool.stencilX.label": "X mark",
+  "tool.stencilX.title": "X mark – two crossed strokes",
+  "tool.stencilCircle.label": "Circle",
+  "tool.stencilCircle.title": "Circle stencil",
+  "tool.stencilTriangle.label": "Triangle",
+  "tool.stencilTriangle.title": "Equilateral triangle stencil",
+  "tool.stencilSquare.label": "Square",
+  "tool.stencilSquare.title": "Square stencil",
+  "tool.stencilLetter.label": "Letter…",
+  "tool.stencilLetter.title": "Letter stencil – you choose the character",
+  "chardlg.title": "Letter stencil",
+  "chardlg.label": "Character to place",
+  "chardlg.ok": "Use",
+  "chardlg.error": "Enter exactly one character."
 }

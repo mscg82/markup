@@ -2,8 +2,10 @@ i18n.ready.then(()=>{          // wait until the locale strings are loaded
 const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
 let bg=null,bg0=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,viewW=0,viewH=0,cur=null,panning=false;
-const widths={draw:6,erase:24};
+const widths={draw:6,erase:24,stencil:40};   // three remembered widths: drawing tools, eraser, stencils (their bounding box side)
+const WMAX={draw:80,erase:80,stencil:200};
 let lastSharp=1;   // sharpness used by the last Resize background (0 off, 1 normal, 2 strong); remembered with the pen widths
+let stencilKind='x',stencilChar='A',eraseSt=[];   // current stencil, its letter; stencils the running eraser stroke could still remove
 let viaSpot=false,spotId=null,spotPt=null;   // viaSpot: the pointer event being handled comes from the spotlight box; spotId: pointer drawing through it; spotPt: pointer position over it (its pixels) for the eraser footprint
 let crop=null,spot=null;   // spot: the floating spotlight box {x,y,collapsed} while one exists
 let cropKind='crop';   // crop selection {x0,y0,x1,y1} in image pixels while the crop mode is active
@@ -30,7 +32,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v30';   // keep in step with CACHE in sw.js
+const APP_VERSION='v31';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -85,8 +87,35 @@ function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTi
 
 /* ---------- drawing primitives ---------- */
 const STAR_INNER=Math.cos(Math.PI*2/5)/Math.cos(Math.PI/5);   // inner/outer radius ratio of a regular pentagram outline (~0.382)
+// Stencils: a ready-made figure inside a square bounding box of side o.w centred on (o.cx,o.cy); every stroke stays
+// inside that square. Stroke thicknesses (relative to the side) were chosen so that the share of the square that is
+// painted is close to the reference X (about 54%): X 0.23, circle and square outlines 0.16, triangle outline 0.12.
+const ST_X=0.23,ST_RING=0.16,ST_TRI=0.12;
+function drawStencil(c,o,g=0){   // g > 0 widens the strokes by g px on each side (used to wipe a stencil without leaving an antialiasing fringe)
+  const w=o.w,x0=o.cx-w/2,y0=o.cy-w/2;
+  c.save();c.fillStyle=c.strokeStyle=o.c||'#000';c.lineJoin='miter';c.lineCap='butt';
+  if(o.k==='x'){
+    const t=w*ST_X+2*g;c.beginPath();c.rect(x0-g,y0-g,w+2*g,w+2*g);c.clip();   // the diagonals run past the corners; the box cuts them flat
+    c.lineWidth=t;c.beginPath();
+    c.moveTo(x0-t,y0-t);c.lineTo(x0+w+t,y0+w+t);c.moveTo(x0+w+t,y0-t);c.lineTo(x0-t,y0+w+t);c.stroke();
+  }else if(o.k==='circle'){
+    const t=w*ST_RING;c.lineWidth=t+2*g;c.beginPath();c.arc(o.cx,o.cy,(w-t)/2,0,Math.PI*2);c.stroke();
+  }else if(o.k==='square'){
+    const t=w*ST_RING;c.lineWidth=t+2*g;c.strokeRect(x0+t/2,y0+t/2,w-t,w-t);
+  }else if(o.k==='tri'){   // equilateral, base = the box width, centred vertically; the outline lies inside the triangle
+    const t=w*ST_TRI,h=w*Math.sqrt(3)/2,r=h/3,k=(r-t/2)/r,gx=o.cx,gy=o.cy+h/6;
+    const V=[[o.cx,o.cy-h/2],[x0+w,o.cy+h/2],[x0,o.cy+h/2]].map(v=>[gx+(v[0]-gx)*k,gy+(v[1]-gy)*k]);
+    c.lineWidth=t+2*g;c.beginPath();c.moveTo(...V[0]);c.lineTo(...V[1]);c.lineTo(...V[2]);c.closePath();c.stroke();
+  }else if(o.k==='char'){   // a bold glyph scaled to fit the square
+    const ch=o.ch||'A';c.font='bold 100px "DejaVu Sans",Arial,Helvetica,sans-serif';c.textBaseline='alphabetic';c.textAlign='left';
+    const m=c.measureText(ch),l=m.actualBoundingBoxLeft,r=m.actualBoundingBoxRight,a=m.actualBoundingBoxAscent,d=m.actualBoundingBoxDescent,gw=l+r,gh=a+d;
+    if(gw>0&&gh>0){const k=Math.min(w/gw,w/gh);c.translate(o.cx,o.cy);c.scale(k,k);c.fillText(ch,-(r-l)/2,(a-d)/2);if(g>0){c.lineWidth=2*g/k;c.lineJoin='round';c.strokeText(ch,-(r-l)/2,(a-d)/2)}}
+  }
+  c.restore();
+}
 function drawOp(c,o){
   if(o.t==='fill'){applyFill(o);return}
+  if(o.t==='stencil'){drawStencil(c,o);return}
   c.save();c.lineCap=c.lineJoin='round';c.lineWidth=o.w;c.strokeStyle=o.c||'#000';
   if(o.t==='erase')c.globalCompositeOperation='destination-out';
   c.beginPath();
@@ -284,7 +313,22 @@ function replay(){
   if(p>0&&from<p)bgCache={src:bg0,ops:ops.slice(0,p),bg:b};
   bg=b;
   if(L.width!==b.width||L.height!==b.height)newLayer(b.width,b.height);else lc.clearRect(0,0,L.width,L.height);
-  for(let i=p;i<ops.length;i++){const o=ops[i];if(isResizeOp(o))applyResizeOp(o);else drawOp(lc,o)}
+  for(let i=p;i<ops.length;i++){const o=ops[i];if(isResizeOp(o))applyResizeOp(o);else{drawOp(lc,o);if(o.t==='erase'&&o.d)wipeStencils(o.d)}}
+}
+// A stencil removed by the eraser is listed (by its index in the history) in the "d" field of the erase operation
+// that touched it, so removing, undoing and redoing it are one history step. At that point of the history the
+// stencil is drawn again with destination-out (1 px wider), which clears exactly what it painted: earlier fills
+// and strokes see the stencil, later ones do not.
+function wipeStencils(list){
+  lc.save();lc.globalCompositeOperation='destination-out';
+  for(const i of list){const o=ops[i];if(o&&o.t==='stencil')drawStencil(lc,o,1)}
+  lc.restore();
+}
+function deadStencils(){
+  const dead=new Set();
+  for(const o of ops)if(o.t==='erase'&&o.d)for(const i of o.d)dead.add(i);
+  if(cur&&cur.d)for(const i of cur.d)dead.add(i);
+  return dead;
 }
 
 /* ---------- view ---------- */
@@ -359,8 +403,9 @@ let tapSeq={n:0,tEnd:0,x:0,y:0,type:'',tracked:[]}; // consecutive quick taps so
 let press=null;                                     // the single press being watched to see if it is a quick tap
 const SHAPE_TOOLS=new Set(['line','arrow','rect','circle','star']);
 function showToolButtons(active){                   // highlight one toolbar tool (null: none) without changing the tool
-  document.querySelectorAll('button[data-t]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.t===active)));
+  document.querySelectorAll('button[data-t]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.t===active&&(active!=='stencil'||x.dataset.k===stencilKind))));
   $('shapesBtn').setAttribute('aria-pressed',String(SHAPE_TOOLS.has(active)));
+  $('stencilsBtn').setAttribute('aria-pressed',String(active==='stencil'));
 }
 function undoTapOps(){                              // drop what the preceding quick taps did
   let removed=false;
@@ -411,7 +456,8 @@ function onDown(e){   // pointer down on the canvas, or on the spotlight box (si
   if(pending){tapTrack={id:e.pointerId,sx:e.clientX,sy:e.clientY,p0:toImg(e)};return}   // a tap places the pending shape; a drag places it and starts a new one
   if(tool==='erase')viaSpot?spotEraserAt(e):eraserPt=local(e);
   const p=toImg(e),w=tool==='erase'?widths.erase:widths.draw,c=$('color').value;
-  if(tool==='pen'||tool==='erase'){cur={t:tool,c,w,p:[p]};drawOp(lc,cur);}
+  if(tool==='stencil')cur={t:'stencil',k:stencilKind,ch:stencilKind==='char'?stencilChar:undefined,c,w:widths.stencil,cx:p[0],cy:p[1]};   // follows the pointer, placed on release
+  else if(tool==='pen'||tool==='erase'){cur={t:tool,c,w,p:[p]};drawOp(lc,cur);if(tool==='erase'){startEraseSt();eraseTouch(p,p)}}
   else cur={t:tool,c,w,a:p,b:p};
   render();
 }
@@ -451,7 +497,9 @@ function onMove(e){
     if(cur.t==='pen'||cur.t==='erase'){
       const prev=cur.p[cur.p.length-1];cur.p.push(p);
       drawOp(lc,{...cur,p:[prev,p]});
-    }else cur.b=p;
+      if(cur.t==='erase'&&eraseSt.length)eraseTouch(prev,p);
+    }else if(cur.t==='stencil'){cur.cx=p[0];cur.cy=p[1]}
+    else cur.b=p;
   }
   render();
 }
@@ -479,8 +527,8 @@ function end(e){
   if(tapTrack&&tapTrack.id===e.pointerId){tapTrack=null;if(e.type==='pointerup')commitPending()}
   const n1=ops.length;
   if(cur&&e.type==='pointerup'){
-    const o=cur;cur=null;
-    const degenerate=!o.p&&o.a[0]===o.b[0]&&o.a[1]===o.b[1];
+    const o=cur;cur=null;eraseSt=[];
+    const degenerate=!o.p&&o.a&&o.a[0]===o.b[0]&&o.a[1]===o.b[1];   // a shape with no length (stencils have no end point)
     if(degenerate)replay();
     else if(MOVABLE.has(o.t))setPending(o);   // rectangle/circle/star: wait for the user to place it
     else{ops.push(o);redoStack=[];if(o.t==='pen'||o.t==='erase'){}else drawOp(lc,o);persist()}
@@ -497,7 +545,23 @@ function end(e){
 }
 cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&eraserPt&&!ptrs.size){eraserPt=null;render()}});
 cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
-function cancelCur(){if(cur){cur=null;replay();render()}}
+function cancelCur(){if(cur){cur=null;eraseSt=[];replay();render()}}
+// Eraser vs stencils: a stencil is removed as soon as the eraser touches its bounding box.
+function startEraseSt(){
+  eraseSt=[];const dead=deadStencils();
+  ops.forEach((o,i)=>{if(o.t==='stencil'&&!dead.has(i))eraseSt.push({i,b:[o.cx-o.w/2,o.cy-o.w/2,o.cx+o.w/2,o.cy+o.w/2]})});
+}
+function eraseTouch(a,b){   // marks (in cur.d) the stencils within the eraser radius of the segment a-b; true when any was hit
+  const r=cur.w/2,len=Math.hypot(b[0]-a[0],b[1]-a[1]),n=Math.min(400,Math.max(1,Math.ceil(len/Math.max(1,r/2))));let any=false;
+  for(let k=eraseSt.length-1;k>=0;k--){
+    const q=eraseSt[k].b;
+    for(let j=0;j<=n;j++){
+      const x=a[0]+(b[0]-a[0])*j/n,y=a[1]+(b[1]-a[1])*j/n,dx=Math.max(q[0]-x,0,x-q[2]),dy=Math.max(q[1]-y,0,y-q[3]);
+      if(dx*dx+dy*dy<=r*r){(cur.d||(cur.d=[])).push(eraseSt[k].i);wipeStencils([eraseSt[k].i]);eraseSt.splice(k,1);any=true;break}
+    }
+  }
+  return any;
+}
 
 /* ---------- pending shape ---------- */
 // After the drag, a rectangle, circle or star is not committed right away. It stays "pending":
@@ -629,40 +693,48 @@ function ui(){
 }
 // The last drawing tool used before the eraser (not Move, not the eraser itself). Choosing a color while the
 // eraser is active switches back to it, or to the pen when there is none.
-let lastEditTool=null;
 function leaveEraser(){
   if(tool!=='erase')return;
-  const b=document.querySelector(`button[data-t="${lastEditTool||'pen'}"]`)||document.querySelector('button[data-t="pen"]');
-  b.click();
+  selectToolButton(lastEditBtn||document.querySelector('button[data-t="pen"]'));
 }
-document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
+let lastEditBtn=null;
+function selectToolButton(b){
   commitPending();
   tool=b.dataset.t;
-  if(tool!=='erase'&&tool!=='pan')lastEditTool=tool;
+  if(tool!=='erase'&&tool!=='pan')lastEditBtn=b;
   document.querySelectorAll('button[data-t]').forEach(x=>x.setAttribute('aria-pressed',x===b));
-  const isShape=!!b.closest('#shapesList');
+  const isShape=!!b.closest('#shapesList'),isStencil=tool==='stencil';
   $('shapesBtn').setAttribute('aria-pressed',String(isShape));
+  $('stencilsBtn').setAttribute('aria-pressed',String(isStencil));
   if(isShape){   // the Shapes button shows the icon of the chosen shape; close its menu
     $('shapesIcon').innerHTML=b.querySelector('svg').outerHTML;
     $('shapesList').hidden=true;$('shapesBtn').setAttribute('aria-expanded','false');
   }
+  if(isStencil){stencilKind=b.dataset.k;$('stencilsIcon').innerHTML=b.querySelector('svg').outerHTML;$('stencilsList').hidden=true;$('stencilsBtn').setAttribute('aria-expanded','false')}
   eraserPt=null;spotPt=null;syncWidth();setCursor();render();   // render: the eraser outline disappears when another tool is chosen
+}
+document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
+  if(b.dataset.k==='char')openCharDialog(b);   // the letter stencil first asks which letter
+  else selectToolButton(b);
 });
+const wkey=()=>tool==='erase'?'erase':tool==='stencil'?'stencil':'draw';   // which remembered width the current tool uses
 function syncWidth(){
-  const v=tool==='erase'?widths.erase:widths.draw;
+  const v=widths[wkey()],mx=WMAX[wkey()];
+  $('width').max=$('widthL').max=mx;
   $('width').value=v;$('widthL').value=v;                       // inline slider and popup slider
   for(const el of[$('wv'),$('wvPop')])if(document.activeElement!==el){el.value=v;el.classList.remove('bad');el.removeAttribute('aria-invalid')}   // a box being edited keeps what is typed
   $('wvBtn').textContent=v;
 }
-function setWidth(v){widths[tool==='erase'?'erase':'draw']=v;if(tool==='erase')render();if(pending&&tool!=='erase'){pending.w=v;render()}syncWidth();savePrefs()}
+function setWidth(v){widths[wkey()]=v;if(tool==='erase')render();if(pending&&tool!=='erase'&&tool!=='stencil'){pending.w=v;render()}syncWidth();savePrefs()}
 const PK='markup.prefs';
-function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,draw:widths.draw,erase:widths.erase,sharp:lastSharp}))}catch(e){}}
+function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,draw:widths.draw,erase:widths.erase,stencil:widths.stencil,sharp:lastSharp}))}catch(e){}}
 try{
   const p=JSON.parse(localStorage.getItem(PK)||'null');
   if(p){
     if(/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
     if(p.draw>=1&&p.draw<=80)widths.draw=(+p.draw);
     if(p.erase>=1&&p.erase<=80)widths.erase=(+p.erase);
+    if(p.stencil>=1&&p.stencil<=WMAX.stencil)widths.stencil=(+p.stencil);
     if(p.sharp===0||p.sharp===1||p.sharp===2)lastSharp=p.sharp;
   }
 }catch(e){}
@@ -681,8 +753,8 @@ $('width').oninput=e=>setWidth((+e.target.value));
 // Typed width: valid whole numbers move the slider at once; invalid ones are flagged and, when the box loses focus
 // (or Enter is pressed), a number out of range is clamped to the nearest limit and anything else reverts.
 for(const el of[$('wv'),$('wvPop')]){
-  const lo=(+$('width').min),hi=(+$('width').max);
-  const inRange=s=>/^\d{1,3}$/.test(s)&&Number(s)>=lo&&Number(s)<=hi;
+  const lo=1,hi=()=>WMAX[wkey()];   // the upper limit depends on the tool
+  const inRange=s=>/^\d{1,3}$/.test(s)&&Number(s)>=lo&&Number(s)<=hi();
   const flag=bad=>{el.classList.toggle('bad',bad);if(bad)el.setAttribute('aria-invalid','true');else el.removeAttribute('aria-invalid')};
   el.addEventListener('focus',()=>el.select());
   el.addEventListener('input',()=>{
@@ -692,7 +764,7 @@ for(const el of[$('wv'),$('wvPop')]){
   });
   const commit=()=>{
     const s=el.value.trim();
-    if(/^\d+$/.test(s))setWidth(Math.min(hi,Math.max(lo,Number(s))));   // out of range: nearest limit
+    if(/^\d+$/.test(s))setWidth(Math.min(hi(),Math.max(lo,Number(s))));   // out of range: nearest limit
     flag(false);syncWidth();                                              // empty or not a number: back to the current width
   };
   el.addEventListener('blur',commit);
@@ -728,7 +800,7 @@ function clearWork(all){
   b.addEventListener('click',e=>{if(e.detail===0&&!b.disabled)clearWork(false)}); // keyboard
 })();
 $('undo').onclick=()=>{commitPending();if(!ops.length)return;const o=ops.pop();redoStack.push(o);replay();persist();ui();if(isResizeOp(o))fit();else render()};
-$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);if(isResizeOp(o)){applyResizeOp(o);syncBgCache();persist();ui();fit()}else{drawOp(lc,o);persist();ui();render()}};
+$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);if(isResizeOp(o)){applyResizeOp(o);syncBgCache();persist();ui();fit()}else{if(o.t==='erase'&&o.d)replay();else drawOp(lc,o);persist();ui();render()}};
 // Long press: jump to the very first (Undo) or the very last (Redo) step of the history.
 function undoAll(){commitPending();if(!ops.length)return;redoStack.push(...ops.reverse());ops=[];replay();persist();ui();fit()}   // reversed, so Redo gives the steps back in order
 function redoAll(){commitPending();if(!redoStack.length)return;ops.push(...redoStack.reverse());redoStack=[];replay();persist();ui();fit()}
@@ -816,7 +888,7 @@ function buildStatus(){   // the application status; shared by Export status and
     format:'markup-status',version:1,exportedAt:new Date().toISOString(),
     background:bg0.toDataURL('image/jpeg',.88),   // the original background; the frames are in the operations
     operations:ops,
-    preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase}
+    preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase,stencilWidth:widths.stencil}
   };
 }
 function exportStatus(name){
@@ -830,6 +902,8 @@ function validOp(o){
   if(o&&o.t==='frame')return [o.top,o.right,o.bottom,o.left].every(v=>Number.isInteger(v)&&v>=0&&v<=MAXDIM)&&typeof o.c==='string'&&/^#[0-9a-f]{6}$/i.test(o.c);
   if(o&&o.t==='fill')return typeof o.c==='string'&&num(o.x)&&num(o.y)&&num(o.tol);
   if(!o||typeof o!=='object'||!num(o.w)||typeof o.c!=='string')return false;
+  if(o.t==='stencil')return ['x','circle','tri','square','char'].includes(o.k)&&num(o.cx)&&num(o.cy)&&o.w>0&&(o.k!=='char'||(typeof o.ch==='string'&&o.ch.length>=1&&o.ch.length<=4));
+  if(o.t==='erase'&&o.d!==undefined&&!(Array.isArray(o.d)&&o.d.every(Number.isInteger)))return false;
   if(o.t==='pen'||o.t==='erase')return Array.isArray(o.p)&&o.p.length>0&&o.p.every(pt);
   if(o.t==='line'||o.t==='arrow'||o.t==='rect'||o.t==='circle'||o.t==='star')return pt(o.a)&&pt(o.b);
   return false;
@@ -850,6 +924,7 @@ function restoreStatus(st,okMsg){
     if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
     if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
     if(p.eraseWidth>=1&&p.eraseWidth<=80)widths.erase=(+p.eraseWidth);
+    if(p.stencilWidth>=1&&p.stencilWidth<=WMAX.stencil)widths.stencil=(+p.stencilWidth);
     syncWidth();markSw();savePrefs();persist(true);ui();fit();msg(okMsg);
   };
   img.onerror=()=>msg(t('msg.badBackground'));
@@ -916,7 +991,7 @@ async function confirmSnapshot(){
   if(!n){const e=$('snapErr');e.textContent=t('snapdlg.error');e.hidden=false;return}
   $('snapOk').disabled=true;                                   // compressing is asynchronous: ignore a second click
   const entry={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:n,created:Date.now(),
-    ...await packSnapshot({operations:ops,preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase}})};   // packing copies the ops
+    ...await packSnapshot({operations:ops,preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase,stencilWidth:widths.stencil}})};   // packing copies the ops
   snaps.push(entry);
   if(!saveSnaps()){snaps.pop();const e=$('snapErr');e.textContent=t('snapdlg.full');e.hidden=false;$('snapOk').disabled=false;return}   // quota exceeded: nothing was changed
   snapDlg.close();renderSnaps();msg(t('msg.snapSaved',{name:n}));
@@ -938,6 +1013,7 @@ async function restoreSnapshot(id){
     if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
     if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
     if(p.eraseWidth>=1&&p.eraseWidth<=80)widths.erase=(+p.eraseWidth);
+    if(p.stencilWidth>=1&&p.stencilWidth<=WMAX.stencil)widths.stencil=(+p.stencilWidth);
     syncWidth();markSw();savePrefs();persist();ui();fit();showSize();msg(t('msg.snapRestored',{name:s.name}));
   }catch(e){msg(t('msg.badStatus'))}
 }
@@ -1061,9 +1137,9 @@ function deleteSnapshot(id){
   $('importFile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importStatus(f)};
 })();
 
-/* ---------- shapes menu ---------- */
-(()=>{
-  const btn=$('shapesBtn'),list=$('shapesList');
+/* ---------- shapes and stencils menus ---------- */
+function dropMenu(btnId,listId,menuId){
+  const btn=$(btnId),list=$(listId);
   const items=()=>[...list.querySelectorAll('button')];
   function open(){
     list.hidden=false;placePopup(list,btn);
@@ -1074,7 +1150,7 @@ function deleteSnapshot(id){
     if(!list.hidden){close();return}
     open();(items().find(b=>b.getAttribute('aria-pressed')==='true')||items()[0]).focus();
   };
-  addEventListener('pointerdown',e=>{if(!list.hidden&&!$('shapesMenu').contains(e.target))close()});
+  addEventListener('pointerdown',e=>{if(!list.hidden&&!$(menuId).contains(e.target))close()});
   list.addEventListener('keydown',e=>{
     const it=items(),i=it.indexOf(document.activeElement);
     if(e.key==='Escape'){close(true)}
@@ -1083,7 +1159,27 @@ function deleteSnapshot(id){
     else return;
     e.preventDefault();e.stopPropagation();
   });
-})();
+  return close;
+}
+dropMenu('shapesBtn','shapesList','shapesMenu');
+const closeStencils=dropMenu('stencilsBtn','stencilsList','stencilsMenu');
+
+/* ---------- letter stencil dialog ---------- */
+const charDlg=$('charDlg');let charBtn=null;
+function openCharDialog(b){
+  charBtn=b;closeStencils();commitPending();
+  $('charInput').value=stencilChar;$('charErr').hidden=true;
+  charDlg.showModal();$('charInput').focus();$('charInput').select();
+}
+function confirmChar(){
+  const v=$('charInput').value.trim(),cs=Array.from(v);
+  if(cs.length!==1){$('charErr').textContent=t('chardlg.error');$('charErr').hidden=false;return}
+  stencilChar=cs[0];charDlg.close();selectToolButton(charBtn);
+}
+$('charOk').onclick=confirmChar;
+$('charCancel').onclick=()=>charDlg.close();
+$('charInput').addEventListener('input',()=>{$('charErr').hidden=true});
+$('charInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmChar()}});
 
 /* ---------- settings dialog ---------- */
 const setDlg=$('settingsDlg');
