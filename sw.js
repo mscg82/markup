@@ -16,7 +16,7 @@
    this program (see the LICENSE file). If not, see <https://www.gnu.org/licenses/>.
 */
 // Bump CACHE when you deploy a new version so clients drop old files.
-const CACHE = 'markup-v33';
+const CACHE = 'markup-v34';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './css/style.css', './js/markup.js', './js/colorpicker.js', './js/i18n.js', './js/diag.js',
