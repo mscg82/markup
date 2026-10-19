@@ -10,6 +10,16 @@ const widths={},WMAX={};
 for(const k of WKEYS){widths[k]=k==='erase'?24:k.startsWith('stencil.')?40:6;WMAX[k]=k.startsWith('stencil.')?200:80}
 // Restore remembered widths from a saved object. w: {key:width} (current format); leg: the single widths of older
 // saves, {draw,erase,stencil}, which are applied to every tool of their group first, so that w can refine them.
+// Colors are remembered per tool in the same way (the eraser has none; the fill tool has its own).
+const CKEYS=[...WKEYS.filter(k=>k!=='erase'),'fill'];
+const colors={};for(const k of CKEYS)colors[k]='#e63946';
+let curCKey='pen';   // the tool whose color the color controls are editing (pan keeps the last drawing tool's)
+const HEX=/^#[0-9a-f]{6}$/i;
+// c: {key:'#rrggbb'} (current format); leg: the single color of older saves, applied to every tool first
+function applyColors(c,leg){
+  if(typeof leg==='string'&&HEX.test(leg))for(const k of CKEYS)colors[k]=leg;
+  if(c&&typeof c==='object')for(const k of CKEYS)if(typeof c[k]==='string'&&HEX.test(c[k]))colors[k]=c[k];
+}
 function applyWidths(w,leg){
   const set=(k,v)=>{if(typeof v==='number'&&v>=1&&v<=WMAX[k])widths[k]=v};
   if(leg){for(const k of['pen',...SHAPE_KEYS])set(k,leg.draw);set('erase',leg.erase);for(const k of STENCIL_KEYS)set(k,leg.stencil)}
@@ -722,12 +732,14 @@ function selectToolButton(b){
     $('shapesList').hidden=true;$('shapesBtn').setAttribute('aria-expanded','false');
   }
   if(isStencil){stencilKind=b.dataset.k;$('stencilsIcon').innerHTML=b.querySelector('svg').outerHTML;$('stencilsList').hidden=true;$('stencilsBtn').setAttribute('aria-expanded','false')}
+  loadToolColor();
   eraserPt=null;spotPt=null;syncWidth();setCursor();render();   // render: the eraser outline disappears when another tool is chosen
 }
 document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
   if(b.dataset.k==='char')openCharDialog(b);   // the letter stencil first asks which letter
   else selectToolButton(b);
 });
+const ckey=()=>tool==='fill'?'fill':(tool==='erase'||tool==='pan')?null:wkey();   // which remembered color the current tool uses (null: none)
 const wkey=()=>tool==='stencil'?'stencil.'+stencilKind:(tool==='erase'||SHAPE_KEYS.includes(tool))?tool:'pen';   // which remembered width the current tool uses (fill and pan show the pen's)
 function syncWidth(){
   const v=widths[wkey()],mx=WMAX[wkey()];
@@ -738,11 +750,11 @@ function syncWidth(){
 }
 function setWidth(v){widths[wkey()]=v;if(tool==='erase')render();if(pending&&tool!=='erase'&&tool!=='stencil'){pending.w=v;render()}syncWidth();savePrefs()}
 const PK='markup.prefs';
-function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,widths,sharp:lastSharp}))}catch(e){}}
+function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,colors,widths,sharp:lastSharp}))}catch(e){}}
 try{
   const p=JSON.parse(localStorage.getItem(PK)||'null');
   if(p){
-    if(/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
+    applyColors(p.colors,p.color);
     applyWidths(p.widths,{draw:p.draw,erase:p.erase,stencil:p.stencil});   // p.draw/erase/stencil: saved by older versions
     if(p.sharp===0||p.sharp===1||p.sharp===2)lastSharp=p.sharp;
   }
@@ -753,11 +765,17 @@ const PALETTE=['#e63946','#f77f00','#fcbf49','#2a9d8f','#06d6a0','#118ab2','#7b2
 const sw=$('sw');
 PALETTE.forEach(c=>{
   const b=document.createElement('button');b.style.background=c;b.dataset.c=c;b.title=c;b.setAttribute('aria-label',t('color.swatch',{color:c}));
-  b.onclick=()=>{leaveEraser();$('color').value=c;if(pending){pending.c=c;render()}markSw();savePrefs()};sw.appendChild(b);
+  b.onclick=()=>{colorChosen(c);savePrefs()};sw.appendChild(b);
 });
 function markSw(){const v=$('color').value.toLowerCase();picker.set(v);sw.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===v))}
-const picker=createColorPicker({mount:$('cp'),input:$('color'),palette:PALETTE,onChange:(c,final)=>{leaveEraser();markSw();if(pending){pending.c=c;render()}if(final)savePrefs()}});
-markSw();
+const picker=createColorPicker({mount:$('cp'),input:$('color'),palette:PALETTE,onChange:(c,final)=>{colorChosen(c);if(final)savePrefs()}});
+function syncColor(){$('color').value=colors[curCKey];markSw()}   // show the remembered color of the current tool
+function loadToolColor(){const k=ckey();if(k){curCKey=k;syncColor()}}   // a tool was chosen
+function colorChosen(c){   // the user picked a color: it belongs to the tool being used (the eraser gives way to the last drawing tool)
+  leaveEraser();$('color').value=c;colors[curCKey]=c;
+  if(pending){pending.c=c;render()}markSw();
+}
+syncColor();
 $('width').oninput=e=>setWidth((+e.target.value));
 // Typed width: valid whole numbers move the slider at once; invalid ones are flagged and, when the box loses focus
 // (or Enter is pressed), a number out of range is clamped to the nearest limit and anything else reverts.
@@ -897,7 +915,7 @@ function buildStatus(){   // the application status; shared by Export status and
     format:'markup-status',version:2,exportedAt:new Date().toISOString(),
     background:bg0.toDataURL('image/jpeg',.88),   // the original background; the frames are in the operations
     operations:ops,
-    preferences:{color:$('color').value,widths:{...widths}}
+    preferences:{color:$('color').value,colors:{...colors},widths:{...widths}}
   };
 }
 function exportStatus(name){
@@ -930,9 +948,9 @@ function restoreStatus(st,okMsg){
     if(W>MAXDIM||H>MAXDIM){msg(t('msg.badStatus'));return}   // the frames would make the image too large
     setBackground(img);cur=null;ops=JSON.parse(JSON.stringify(st.operations));redoStack=[];discardPending();resetNames();resetSnapshots();replay();   // the background changes, so the snapshots go
     const p=st.preferences||{};
-    if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
+    applyColors(p.colors,p.color);
     applyWidths(p.widths,{draw:p.drawWidth,erase:p.eraseWidth,stencil:p.stencilWidth});   // version 1 files have only drawWidth/eraseWidth
-    syncWidth();markSw();savePrefs();persist(true);ui();fit();msg(okMsg);
+    syncWidth();syncColor();savePrefs();persist(true);ui();fit();msg(okMsg);
   };
   img.onerror=()=>msg(t('msg.badBackground'));
   img.src=st.background;
@@ -998,7 +1016,7 @@ async function confirmSnapshot(){
   if(!n){const e=$('snapErr');e.textContent=t('snapdlg.error');e.hidden=false;return}
   $('snapOk').disabled=true;                                   // compressing is asynchronous: ignore a second click
   const entry={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:n,created:Date.now(),
-    ...await packSnapshot({operations:ops,preferences:{color:$('color').value,widths:{...widths}}})};   // packing copies the ops
+    ...await packSnapshot({operations:ops,preferences:{color:$('color').value,colors:{...colors},widths:{...widths}}})};   // packing copies the ops
   snaps.push(entry);
   if(!saveSnaps()){snaps.pop();const e=$('snapErr');e.textContent=t('snapdlg.full');e.hidden=false;$('snapOk').disabled=false;return}   // quota exceeded: nothing was changed
   snapDlg.close();renderSnaps();msg(t('msg.snapSaved',{name:n}));
@@ -1017,9 +1035,9 @@ async function restoreSnapshot(id){
     if(W>MAXDIM||H>MAXDIM)throw new Error('too large');
     cur=null;ops=d.operations;redoStack=[];discardPending();resetNames();replay();   // same background, new history
     const p=d.preferences||{};
-    if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
+    applyColors(p.colors,p.color);
     applyWidths(p.widths,{draw:p.drawWidth,erase:p.eraseWidth,stencil:p.stencilWidth});   // version 1 files have only drawWidth/eraseWidth
-    syncWidth();markSw();savePrefs();persist();ui();fit();showSize();msg(t('msg.snapRestored',{name:s.name}));
+    syncWidth();syncColor();savePrefs();persist();ui();fit();showSize();msg(t('msg.snapRestored',{name:s.name}));
   }catch(e){msg(t('msg.badStatus'))}
 }
 function deleteSnapshot(id){
