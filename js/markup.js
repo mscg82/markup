@@ -70,13 +70,13 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v32';   // keep in step with CACHE in sw.js
+const APP_VERSION='v33';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
 const SETTINGS_KEY='markup.settings';
 const validSize=v=>Number.isInteger(v)&&v>=16&&v<=MAXDIM;
-let settings={lang:'auto',newW:1600,newH:1200,diag:false,palm:false,palmMs:250};
+let settings={lang:'auto',newW:1600,newH:1200,diag:false,palm:false,palmMs:250,murdoku:false};
 try{
   const p=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'null');
   if(p){
@@ -85,6 +85,7 @@ try{
     if(validSize(p.newH))settings.newH=p.newH;
     if(typeof p.diag==='boolean')settings.diag=p.diag;
     if(typeof p.palm==='boolean')settings.palm=p.palm;
+    if(typeof p.murdoku==='boolean')settings.murdoku=p.murdoku;
     if(Number.isInteger(p.palmMs)&&p.palmMs>=0&&p.palmMs<=1000)settings.palmMs=p.palmMs;
   }
 }catch(e){}
@@ -351,7 +352,7 @@ function replay(){
   if(p>0&&from<p)bgCache={src:bg0,ops:ops.slice(0,p),bg:b};
   bg=b;
   if(L.width!==b.width||L.height!==b.height)newLayer(b.width,b.height);else lc.clearRect(0,0,L.width,L.height);
-  for(let i=p;i<ops.length;i++){const o=ops[i];if(isResizeOp(o))applyResizeOp(o);else{drawOp(lc,o);if(o.t==='erase'&&o.d)wipeStencils(o.d)}}
+  for(let i=p;i<ops.length;i++){const o=ops[i];if(isResizeOp(o))applyResizeOp(o);else{if(o.d)wipeStencils(o.d);drawOp(lc,o)}}   // an op's d (erase, or a Murdoku X mark) lists the stencils it deleted; they go before it is drawn
 }
 // A stencil removed by the eraser is listed (by its index in the history) in the "d" field of the erase operation
 // that touched it, so removing, undoing and redoing it are one history step. At that point of the history the
@@ -364,7 +365,7 @@ function wipeStencils(list){
 }
 function deadStencils(){
   const dead=new Set();
-  for(const o of ops)if(o.t==='erase'&&o.d)for(const i of o.d)dead.add(i);
+  for(const o of ops)if(o.d)for(const i of o.d)dead.add(i);
   if(cur&&cur.d)for(const i of cur.d)dead.add(i);
   return dead;
 }
@@ -570,7 +571,12 @@ function end(e){
     const degenerate=!o.p&&o.a&&o.a[0]===o.b[0]&&o.a[1]===o.b[1];   // a shape with no length (stencils have no end point)
     if(degenerate)replay();
     else if(MOVABLE.has(o.t))setPending(o);   // rectangle/circle/star: wait for the user to place it
-    else{ops.push(o);redoStack=[];if(o.t==='pen'||o.t==='erase'){}else drawOp(lc,o);persist()}
+    else{
+      if(settings.murdoku&&o.t==='stencil'&&o.k==='x'){const d=murdokuHits(o);if(d.length)o.d=d}   // Murdoku mode: the X mark deletes the other stencils it overlaps, once it is placed
+      ops.push(o);redoStack=[];
+      if(o.t==='pen'||o.t==='erase'){}else{if(o.d)wipeStencils(o.d);drawOp(lc,o)}
+      persist();
+    }
     ui();render();
   }else if(cur)cancelCur();
   if(!created&&ops.length>n1)created=ops[ops.length-1];
@@ -584,6 +590,16 @@ function end(e){
 }
 cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&eraserPt&&!ptrs.size){eraserPt=null;render()}});
 cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+// Murdoku mode: indices of the live stencils, other than X marks, whose bounding box overlaps the X mark o.
+function murdokuHits(o){
+  const dead=deadStencils(),hits=[];
+  ops.forEach((q,i)=>{
+    if(q.t!=='stencil'||q.k==='x'||dead.has(i))return;
+    const r=(q.w+o.w)/2;
+    if(Math.abs(q.cx-o.cx)<r&&Math.abs(q.cy-o.cy)<r)hits.push(i);
+  });
+  return hits;
+}
 function cancelCur(){if(cur){cur=null;eraseSt=[];replay();render()}}
 // Eraser vs stencils: a stencil is removed as soon as the eraser touches its bounding box.
 function startEraseSt(){
@@ -845,7 +861,7 @@ function clearWork(all){
   b.addEventListener('click',e=>{if(e.detail===0&&!b.disabled)clearWork(false)}); // keyboard
 })();
 $('undo').onclick=()=>{commitPending();if(!ops.length)return;const o=ops.pop();redoStack.push(o);replay();persist();ui();if(isResizeOp(o))fit();else render()};
-$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);if(isResizeOp(o)){applyResizeOp(o);syncBgCache();persist();ui();fit()}else{if(o.t==='erase'&&o.d)replay();else drawOp(lc,o);persist();ui();render()}};
+$('redo').onclick=()=>{commitPending();if(!redoStack.length)return;const o=redoStack.pop();ops.push(o);if(isResizeOp(o)){applyResizeOp(o);syncBgCache();persist();ui();fit()}else{if(o.d)replay();else drawOp(lc,o);persist();ui();render()}};
 // Long press: jump to the very first (Undo) or the very last (Redo) step of the history.
 function undoAll(){commitPending();if(!ops.length)return;redoStack.push(...ops.reverse());ops=[];replay();persist();ui();fit()}   // reversed, so Redo gives the steps back in order
 function redoAll(){commitPending();if(!redoStack.length)return;ops.push(...redoStack.reverse());redoStack=[];replay();persist();ui();fit()}
@@ -947,8 +963,8 @@ function validOp(o){
   if(o&&o.t==='frame')return [o.top,o.right,o.bottom,o.left].every(v=>Number.isInteger(v)&&v>=0&&v<=MAXDIM)&&typeof o.c==='string'&&/^#[0-9a-f]{6}$/i.test(o.c);
   if(o&&o.t==='fill')return typeof o.c==='string'&&num(o.x)&&num(o.y)&&num(o.tol);
   if(!o||typeof o!=='object'||!num(o.w)||typeof o.c!=='string')return false;
+  if((o.t==='erase'||o.t==='stencil')&&o.d!==undefined&&!(Array.isArray(o.d)&&o.d.every(Number.isInteger)))return false;
   if(o.t==='stencil')return ['x','circle','tri','square','char'].includes(o.k)&&num(o.cx)&&num(o.cy)&&o.w>0&&(o.k!=='char'||(typeof o.ch==='string'&&o.ch.length>=1&&o.ch.length<=4));
-  if(o.t==='erase'&&o.d!==undefined&&!(Array.isArray(o.d)&&o.d.every(Number.isInteger)))return false;
   if(o.t==='pen'||o.t==='erase')return Array.isArray(o.p)&&o.p.length>0&&o.p.every(pt);
   if(o.t==='line'||o.t==='arrow'||o.t==='rect'||o.t==='circle'||o.t==='star')return pt(o.a)&&pt(o.b);
   return false;
@@ -1231,7 +1247,7 @@ async function openSettings(){
   sel.add(new Option(t('settings.langAuto'),'auto'));
   langs.forEach(l=>sel.add(new Option(l.name,l.code)));
   sel.value=[...sel.options].some(o=>o.value===settings.lang)?settings.lang:'auto';
-  $('setW').value=settings.newW;$('setH').value=settings.newH;$('setDiag').checked=settings.diag;$('setPalm').checked=settings.palm;$('setPalmMs').value=settings.palmMs;setDlg.querySelectorAll('.help').forEach(b=>{$(b.dataset.help).hidden=true;b.setAttribute('aria-expanded','false')});
+  $('setW').value=settings.newW;$('setH').value=settings.newH;$('setDiag').checked=settings.diag;$('setPalm').checked=settings.palm;$('setMurdoku').checked=settings.murdoku;$('setPalmMs').value=settings.palmMs;setDlg.querySelectorAll('.help').forEach(b=>{$(b.dataset.help).hidden=true;b.setAttribute('aria-expanded','false')});
   setDlg.showModal();
 }
 function applySettings(){
@@ -1241,7 +1257,7 @@ function applySettings(){
   }
   let pm=parseInt($('setPalmMs').value,10);if(!(pm>=0&&pm<=1000))pm=250;
   const lang=$('setLang').value,langChanged=lang!==settings.lang;
-  settings={lang,newW:w,newH:h,diag:$('setDiag').checked,palm:$('setPalm').checked,palmMs:pm};palmOn=settings.palm;palmReset();saveSettings();setDlg.close();
+  settings={lang,newW:w,newH:h,diag:$('setDiag').checked,palm:$('setPalm').checked,palmMs:pm,murdoku:$('setMurdoku').checked};palmOn=settings.palm;palmReset();saveSettings();setDlg.close();
   dispatchEvent(new CustomEvent('markup:diag',{detail:settings.diag}));
   if(langChanged){            // strings are applied at startup, so reload to use the new language
     const u=new URL(location.href);
