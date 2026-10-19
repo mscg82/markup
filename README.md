@@ -40,6 +40,7 @@ It works on laptops and on mobile browsers (Chrome is the primary target) and ca
 
 ```
 index.html              page markup
+LICENSE                 GNU General Public License, version 3
 css/style.css           styles
 js/markup.js            the application logic
 js/colorpicker.js       custom color picker (same look in every browser; also used by the new-image dialog)
@@ -121,4 +122,4 @@ Developed for Chrome (desktop and Android). It uses standard APIs (canvas, point
 
 ## License
 
-Add a license of your choice (for example MIT) before publishing.
+Markup is free software, released under the **GNU General Public License, version 3 or (at your option) any later version** (GPL-3.0-or-later). The full text is in the [LICENSE](LICENSE) file, and each source file carries a short notice (copyright Giuseppe Miscione) with an SPDX identifier. You may use, study, share and modify it under those terms; if you distribute a modified version (including by hosting it for others), you must make its source available under the same license. There is no warranty.
