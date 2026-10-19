@@ -70,7 +70,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v33';   // keep in step with CACHE in sw.js
+const APP_VERSION='v34';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -496,7 +496,7 @@ function onDown(e){   // pointer down on the canvas, or on the spotlight box (si
   if(tool==='erase')viaSpot?spotEraserAt(e):eraserPt=local(e);
   const p=toImg(e),w=widths[wkey()],c=$('color').value;
   const letter=stencilKind==='char'||stencilKind==='char2';   // both letter stencils are drawn (and saved) as 'char'
-  if(tool==='stencil')cur={t:'stencil',k:letter?'char':stencilKind,ch:letter?stencilChar:undefined,c,w,cx:p[0],cy:p[1]};   // follows the pointer, placed on release
+  if(tool==='stencil')cur={t:'stencil',k:letter?'char':stencilKind,ch:letter?stencilChar:undefined,lt:stencilKind==='char2'?2:undefined,c,w,cx:p[0],cy:p[1]};   // follows the pointer, placed on release
   else if(tool==='pen'||tool==='erase'){cur={t:tool,c,w,p:[p]};drawOp(lc,cur);if(tool==='erase'){startEraseSt();eraseTouch(p,p)}}
   else cur={t:tool,c,w,a:p,b:p};
   render();
@@ -572,7 +572,7 @@ function end(e){
     if(degenerate)replay();
     else if(MOVABLE.has(o.t))setPending(o);   // rectangle/circle/star: wait for the user to place it
     else{
-      if(settings.murdoku&&o.t==='stencil'&&o.k==='x'){const d=murdokuHits(o);if(d.length)o.d=d}   // Murdoku mode: the X mark deletes the other stencils it overlaps, once it is placed
+      if(settings.murdoku&&o.t==='stencil'){const d=murdokuHits(o);if(d.length)o.d=d}   // Murdoku mode: what a newly placed X mark or Text 1 deletes, once it is placed
       ops.push(o);redoStack=[];
       if(o.t==='pen'||o.t==='erase'){}else{if(o.d)wipeStencils(o.d);drawOp(lc,o)}
       persist();
@@ -590,13 +590,19 @@ function end(e){
 }
 cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&eraserPt&&!ptrs.size){eraserPt=null;render()}});
 cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
-// Murdoku mode: indices of the live stencils, other than X marks, whose bounding box overlaps the X mark o.
+// Murdoku mode: indices of the live stencils that the newly placed stencil o deletes.
+// - X mark: every other stencil (not an X mark) whose bounding box overlaps its own.
+// - Text 1 (letter stencil without lt:2): every Text 2 (lt:2) whose box overlaps its own, and every Text 2 with the same character anywhere.
+// Text 2 stencils are letter stencils saved with lt:2 (Text 1 ones have no lt, so older files read as Text 1).
 function murdokuHits(o){
+  const isX=o.k==='x',isT1=o.k==='char'&&o.lt!==2;
+  if(!isX&&!isT1)return[];
   const dead=deadStencils(),hits=[];
   ops.forEach((q,i)=>{
-    if(q.t!=='stencil'||q.k==='x'||dead.has(i))return;
-    const r=(q.w+o.w)/2;
-    if(Math.abs(q.cx-o.cx)<r&&Math.abs(q.cy-o.cy)<r)hits.push(i);
+    if(q.t!=='stencil'||dead.has(i))return;
+    const r=(q.w+o.w)/2,overlap=Math.abs(q.cx-o.cx)<r&&Math.abs(q.cy-o.cy)<r;
+    if(isX){if(q.k!=='x'&&overlap)hits.push(i)}
+    else if(q.k==='char'&&q.lt===2&&(overlap||q.ch===o.ch))hits.push(i);
   });
   return hits;
 }
@@ -964,7 +970,7 @@ function validOp(o){
   if(o&&o.t==='fill')return typeof o.c==='string'&&num(o.x)&&num(o.y)&&num(o.tol);
   if(!o||typeof o!=='object'||!num(o.w)||typeof o.c!=='string')return false;
   if((o.t==='erase'||o.t==='stencil')&&o.d!==undefined&&!(Array.isArray(o.d)&&o.d.every(Number.isInteger)))return false;
-  if(o.t==='stencil')return ['x','circle','tri','square','char'].includes(o.k)&&num(o.cx)&&num(o.cy)&&o.w>0&&(o.k!=='char'||(typeof o.ch==='string'&&o.ch.length>=1&&o.ch.length<=4));
+  if(o.t==='stencil')return ['x','circle','tri','square','char'].includes(o.k)&&(o.lt===undefined||(o.lt===2&&o.k==='char'))&&num(o.cx)&&num(o.cy)&&o.w>0&&(o.k!=='char'||(typeof o.ch==='string'&&o.ch.length>=1&&o.ch.length<=4));
   if(o.t==='pen'||o.t==='erase')return Array.isArray(o.p)&&o.p.length>0&&o.p.every(pt);
   if(o.t==='line'||o.t==='arrow'||o.t==='rect'||o.t==='circle'||o.t==='star')return pt(o.a)&&pt(o.b);
   return false;
