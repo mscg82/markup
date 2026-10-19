@@ -4,7 +4,7 @@ const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
 let bg=null,bg0=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,viewW=0,viewH=0,cur=null,panning=false;
 // Every tool that has a width remembers its own: the pen, each shape, the eraser and each stencil type (for a stencil
 // the width is the side of its bounding box, hence the larger limit).
-const WKEYS=['pen','line','arrow','rect','circle','star','erase','stencil.x','stencil.circle','stencil.tri','stencil.square','stencil.char'];
+const WKEYS=['pen','line','arrow','rect','circle','star','erase','stencil.x','stencil.circle','stencil.tri','stencil.square','stencil.char','stencil.char2'];   // two letter stencils (same drawing) with separate widths and colors
 const SHAPE_KEYS=['line','arrow','rect','circle','star'],STENCIL_KEYS=WKEYS.filter(k=>k.startsWith('stencil.'));
 const widths={},WMAX={};
 for(const k of WKEYS){widths[k]=k==='erase'?24:k.startsWith('stencil.')?40:6;WMAX[k]=k.startsWith('stencil.')?200:80}
@@ -477,7 +477,8 @@ function onDown(e){   // pointer down on the canvas, or on the spotlight box (si
   if(pending){tapTrack={id:e.pointerId,sx:e.clientX,sy:e.clientY,p0:toImg(e)};return}   // a tap places the pending shape; a drag places it and starts a new one
   if(tool==='erase')viaSpot?spotEraserAt(e):eraserPt=local(e);
   const p=toImg(e),w=widths[wkey()],c=$('color').value;
-  if(tool==='stencil')cur={t:'stencil',k:stencilKind,ch:stencilKind==='char'?stencilChar:undefined,c,w,cx:p[0],cy:p[1]};   // follows the pointer, placed on release
+  const letter=stencilKind==='char'||stencilKind==='char2';   // both letter stencils are drawn (and saved) as 'char'
+  if(tool==='stencil')cur={t:'stencil',k:letter?'char':stencilKind,ch:letter?stencilChar:undefined,c,w,cx:p[0],cy:p[1]};   // follows the pointer, placed on release
   else if(tool==='pen'||tool==='erase'){cur={t:tool,c,w,p:[p]};drawOp(lc,cur);if(tool==='erase'){startEraseSt();eraseTouch(p,p)}}
   else cur={t:tool,c,w,a:p,b:p};
   render();
@@ -736,7 +737,7 @@ function selectToolButton(b){
   eraserPt=null;spotPt=null;syncWidth();setCursor();render();   // render: the eraser outline disappears when another tool is chosen
 }
 document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
-  if(b.dataset.k==='char')openCharDialog(b);   // the letter stencil first asks which letter
+  if(b.dataset.k==='char'||b.dataset.k==='char2')openCharDialog(b);   // the letter stencil first asks which letter
   else selectToolButton(b);
 });
 const ckey=()=>tool==='fill'?'fill':(tool==='erase'||tool==='pan')?null:wkey();   // which remembered color the current tool uses (null: none)
