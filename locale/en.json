@@ -156,6 +156,8 @@
   "width.valueLabel": "Line width in pixels (type a value from 1 to 80)",
   "settings.diag": "Show touch diagnostics",
   "settings.diagNote": "Shows an on-screen panel with what the browser reports for each touch, pen or mouse pointer (type, contact size, pressure). Useful to find out whether a device can tell a stylus, a finger and a palm apart.",
+  "settings.murdoku": "Enable Murdoku mode",
+  "settings.murdokuNote": "When on, placing an X mark deletes every other stencil (circle, triangle, square or letter) whose bounding box it overlaps. This happens only when the X mark is placed, not while you drag it, and Undo brings the deleted stencils back together with the X mark.",
   "diag.title": "Touch diagnostics",
   "diag.active": "Pointers on screen now",
   "diag.stats": "Totals by pointer type (n = presses, w/h = contact size in px, pmax = highest pressure)",
