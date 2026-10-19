@@ -1238,7 +1238,12 @@ widthPop.addEventListener('keydown',e=>{
   e.stopPropagation();                       // keep arrows/space from panning the canvas
   if(e.key==='Escape'||e.key==='Enter'){e.preventDefault();closeWidthPop(true)}
 });
+// While a width box is being edited the layout is left alone: the on-screen keyboard shrinks the window, which
+// would collapse the controls and make the box (and the keyboard) disappear under the user's fingers.
+const editingWidth=()=>{const a=document.activeElement;return a===$('wv')||a===$('wvPop')};
+for(const el of[$('wv'),$('wvPop')])el.addEventListener('blur',()=>requestAnimationFrame(layoutWidth));   // layout catches up when the editing ends
 function layoutWidth(){
+  if(editingWidth())return;
   const hdr=document.querySelector('header');
   hdr.classList.remove('wpop','vexp');
   let collapse;
