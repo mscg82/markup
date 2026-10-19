@@ -192,6 +192,23 @@ html.tb-left .row>button{justify-content:center}
 html.tb-left #mainMenu{justify-self:start}
 html.tb-left #mainMenu>button{width:auto}
 /* popups open to the right of the toolbar, in viewport coordinates (js/markup.js: placePopup) */
+/* Left toolbar with enough height (js/markup.js layoutWidth adds "vexp" to the header): the color picker and the width
+   selector sit side by side, each taking half of the toolbar. Left: the color button (it opens the usual popup with
+   the square, the hue bar and the hex field) with the palette below it. Right: the number box above a vertical slider.
+   When the height is not enough, "vexp" is removed and both fold into buttons ("wpop"), as before. */
+.wslot{display:contents}
+html.tb-left header.vexp .gw{display:grid;grid-auto-flow:row;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto;gap:8px 4px;align-items:start}
+html.tb-left header.vexp #cp{grid-column:1;grid-row:1}
+html.tb-left header.vexp #sw{grid-column:1;grid-row:2;display:grid;grid-template-columns:repeat(2,28px);justify-content:center;gap:4px}
+html.tb-left header.vexp #sw button{width:28px;height:28px}
+html.tb-left header.vexp #wv{grid-column:2;grid-row:1;width:100%;box-sizing:border-box;min-height:36px}
+html.tb-left header.vexp .wslot{grid-column:2;grid-row:2;display:block;position:relative;height:252px}
+html.tb-left header.vexp #width{position:absolute;left:50%;top:50%;width:252px;height:30px;min-width:0;flex:none;margin:0;transform:translate(-50%,-50%) rotate(-90deg)}
+html.tb-left header.vexp #widthMenu{display:none}
+html.tb-left header.vexp #cp .cp-swatches{display:none}   /* the palette is under the button, not in the popup */
+html.tb-left header.vexp #cp .cp-pop.has-palette{flex-direction:column;align-items:stretch;width:220px}
+html.tb-left header.vexp #cp .cp-pop.has-palette .cp-main{width:auto}
+html.tb-left header.vexp #cp .cp-pop.has-palette .cp-sv{height:150px}
 html.tb-left #menuList,html.tb-left #shapesList,html.tb-left #stencilsList,html.tb-left #widthPop{position:fixed;right:auto;max-height:calc(100vh - 12px);overflow-y:auto}
 
 /* snapshots submenu */

@@ -2,8 +2,19 @@ i18n.ready.then(()=>{          // wait until the locale strings are loaded
 const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
 let bg=null,bg0=null,L=null,lc=null,ops=[],redoStack=[],tool='pen',s=1,ox=0,oy=0,viewW=0,viewH=0,cur=null,panning=false;
-const widths={draw:6,erase:24,stencil:40};   // three remembered widths: drawing tools, eraser, stencils (their bounding box side)
-const WMAX={draw:80,erase:80,stencil:200};
+// Every tool that has a width remembers its own: the pen, each shape, the eraser and each stencil type (for a stencil
+// the width is the side of its bounding box, hence the larger limit).
+const WKEYS=['pen','line','arrow','rect','circle','star','erase','stencil.x','stencil.circle','stencil.tri','stencil.square','stencil.char'];
+const SHAPE_KEYS=['line','arrow','rect','circle','star'],STENCIL_KEYS=WKEYS.filter(k=>k.startsWith('stencil.'));
+const widths={},WMAX={};
+for(const k of WKEYS){widths[k]=k==='erase'?24:k.startsWith('stencil.')?40:6;WMAX[k]=k.startsWith('stencil.')?200:80}
+// Restore remembered widths from a saved object. w: {key:width} (current format); leg: the single widths of older
+// saves, {draw,erase,stencil}, which are applied to every tool of their group first, so that w can refine them.
+function applyWidths(w,leg){
+  const set=(k,v)=>{if(typeof v==='number'&&v>=1&&v<=WMAX[k])widths[k]=v};
+  if(leg){for(const k of['pen',...SHAPE_KEYS])set(k,leg.draw);set('erase',leg.erase);for(const k of STENCIL_KEYS)set(k,leg.stencil)}
+  if(w&&typeof w==='object')for(const k of WKEYS)set(k,w[k]);
+}
 let lastSharp=1;   // sharpness used by the last Resize background (0 off, 1 normal, 2 strong); remembered with the pen widths
 let stencilKind='x',stencilChar='A',eraseSt=[];   // current stencil, its letter; stencils the running eraser stroke could still remove
 let viaSpot=false,spotId=null,spotPt=null;   // viaSpot: the pointer event being handled comes from the spotlight box; spotId: pointer drawing through it; spotPt: pointer position over it (its pixels) for the eraser footprint
@@ -32,7 +43,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v31';   // keep in step with CACHE in sw.js
+const APP_VERSION='v32';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -455,8 +466,8 @@ function onDown(e){   // pointer down on the canvas, or on the spotlight box (si
   if(tool==='fill'){fillTap={id:e.pointerId,p:toImg(e),sx:e.clientX,sy:e.clientY,c:$('color').value};return}   // applied on release
   if(pending){tapTrack={id:e.pointerId,sx:e.clientX,sy:e.clientY,p0:toImg(e)};return}   // a tap places the pending shape; a drag places it and starts a new one
   if(tool==='erase')viaSpot?spotEraserAt(e):eraserPt=local(e);
-  const p=toImg(e),w=tool==='erase'?widths.erase:widths.draw,c=$('color').value;
-  if(tool==='stencil')cur={t:'stencil',k:stencilKind,ch:stencilKind==='char'?stencilChar:undefined,c,w:widths.stencil,cx:p[0],cy:p[1]};   // follows the pointer, placed on release
+  const p=toImg(e),w=widths[wkey()],c=$('color').value;
+  if(tool==='stencil')cur={t:'stencil',k:stencilKind,ch:stencilKind==='char'?stencilChar:undefined,c,w,cx:p[0],cy:p[1]};   // follows the pointer, placed on release
   else if(tool==='pen'||tool==='erase'){cur={t:tool,c,w,p:[p]};drawOp(lc,cur);if(tool==='erase'){startEraseSt();eraseTouch(p,p)}}
   else cur={t:tool,c,w,a:p,b:p};
   render();
@@ -486,7 +497,7 @@ function onMove(e){
   if(tapTrack&&tapTrack.id===e.pointerId){
     if(Math.hypot(e.clientX-tapTrack.sx,e.clientY-tapTrack.sy)>10){
       const t0=tapTrack;tapTrack=null;commitPending();
-      cur={t:tool,c:$('color').value,w:widths.draw,a:t0.p0,b:toImg(e)};render();
+      cur={t:tool,c:$('color').value,w:widths[wkey()],a:t0.p0,b:toImg(e)};render();
     }
     return;
   }
@@ -717,7 +728,7 @@ document.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{
   if(b.dataset.k==='char')openCharDialog(b);   // the letter stencil first asks which letter
   else selectToolButton(b);
 });
-const wkey=()=>tool==='erase'?'erase':tool==='stencil'?'stencil':'draw';   // which remembered width the current tool uses
+const wkey=()=>tool==='stencil'?'stencil.'+stencilKind:(tool==='erase'||SHAPE_KEYS.includes(tool))?tool:'pen';   // which remembered width the current tool uses (fill and pan show the pen's)
 function syncWidth(){
   const v=widths[wkey()],mx=WMAX[wkey()];
   $('width').max=$('widthL').max=mx;
@@ -727,14 +738,12 @@ function syncWidth(){
 }
 function setWidth(v){widths[wkey()]=v;if(tool==='erase')render();if(pending&&tool!=='erase'&&tool!=='stencil'){pending.w=v;render()}syncWidth();savePrefs()}
 const PK='markup.prefs';
-function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,draw:widths.draw,erase:widths.erase,stencil:widths.stencil,sharp:lastSharp}))}catch(e){}}
+function savePrefs(){try{localStorage.setItem(PK,JSON.stringify({color:$('color').value,widths,sharp:lastSharp}))}catch(e){}}
 try{
   const p=JSON.parse(localStorage.getItem(PK)||'null');
   if(p){
     if(/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
-    if(p.draw>=1&&p.draw<=80)widths.draw=(+p.draw);
-    if(p.erase>=1&&p.erase<=80)widths.erase=(+p.erase);
-    if(p.stencil>=1&&p.stencil<=WMAX.stencil)widths.stencil=(+p.stencil);
+    applyWidths(p.widths,{draw:p.draw,erase:p.erase,stencil:p.stencil});   // p.draw/erase/stencil: saved by older versions
     if(p.sharp===0||p.sharp===1||p.sharp===2)lastSharp=p.sharp;
   }
 }catch(e){}
@@ -885,10 +894,10 @@ function saveJpeg(name){
 }
 function buildStatus(){   // the application status; shared by Export status and Snapshots
   return{
-    format:'markup-status',version:1,exportedAt:new Date().toISOString(),
+    format:'markup-status',version:2,exportedAt:new Date().toISOString(),
     background:bg0.toDataURL('image/jpeg',.88),   // the original background; the frames are in the operations
     operations:ops,
-    preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase,stencilWidth:widths.stencil}
+    preferences:{color:$('color').value,widths:{...widths}}
   };
 }
 function exportStatus(name){
@@ -922,9 +931,7 @@ function restoreStatus(st,okMsg){
     setBackground(img);cur=null;ops=JSON.parse(JSON.stringify(st.operations));redoStack=[];discardPending();resetNames();resetSnapshots();replay();   // the background changes, so the snapshots go
     const p=st.preferences||{};
     if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
-    if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
-    if(p.eraseWidth>=1&&p.eraseWidth<=80)widths.erase=(+p.eraseWidth);
-    if(p.stencilWidth>=1&&p.stencilWidth<=WMAX.stencil)widths.stencil=(+p.stencilWidth);
+    applyWidths(p.widths,{draw:p.drawWidth,erase:p.eraseWidth,stencil:p.stencilWidth});   // version 1 files have only drawWidth/eraseWidth
     syncWidth();markSw();savePrefs();persist(true);ui();fit();msg(okMsg);
   };
   img.onerror=()=>msg(t('msg.badBackground'));
@@ -991,7 +998,7 @@ async function confirmSnapshot(){
   if(!n){const e=$('snapErr');e.textContent=t('snapdlg.error');e.hidden=false;return}
   $('snapOk').disabled=true;                                   // compressing is asynchronous: ignore a second click
   const entry={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:n,created:Date.now(),
-    ...await packSnapshot({operations:ops,preferences:{color:$('color').value,drawWidth:widths.draw,eraseWidth:widths.erase,stencilWidth:widths.stencil}})};   // packing copies the ops
+    ...await packSnapshot({operations:ops,preferences:{color:$('color').value,widths:{...widths}}})};   // packing copies the ops
   snaps.push(entry);
   if(!saveSnaps()){snaps.pop();const e=$('snapErr');e.textContent=t('snapdlg.full');e.hidden=false;$('snapOk').disabled=false;return}   // quota exceeded: nothing was changed
   snapDlg.close();renderSnaps();msg(t('msg.snapSaved',{name:n}));
@@ -1011,9 +1018,7 @@ async function restoreSnapshot(id){
     cur=null;ops=d.operations;redoStack=[];discardPending();resetNames();replay();   // same background, new history
     const p=d.preferences||{};
     if(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color))$('color').value=p.color;
-    if(p.drawWidth>=1&&p.drawWidth<=80)widths.draw=(+p.drawWidth);
-    if(p.eraseWidth>=1&&p.eraseWidth<=80)widths.erase=(+p.eraseWidth);
-    if(p.stencilWidth>=1&&p.stencilWidth<=WMAX.stencil)widths.stencil=(+p.stencilWidth);
+    applyWidths(p.widths,{draw:p.drawWidth,erase:p.eraseWidth,stencil:p.stencilWidth});   // version 1 files have only drawWidth/eraseWidth
     syncWidth();markSw();savePrefs();persist();ui();fit();showSize();msg(t('msg.snapRestored',{name:s.name}));
   }catch(e){msg(t('msg.badStatus'))}
 }
@@ -1235,9 +1240,13 @@ widthPop.addEventListener('keydown',e=>{
 });
 function layoutWidth(){
   const hdr=document.querySelector('header');
-  hdr.classList.remove('wpop');
-  const collapse=document.documentElement.classList.contains('tb-left')   // the left toolbar is too narrow for a slider
-    ||$('width').getBoundingClientRect().width<MIN_INLINE_WIDTH;
+  hdr.classList.remove('wpop','vexp');
+  let collapse;
+  if(document.documentElement.classList.contains('tb-left')){   // too narrow for a horizontal slider; a vertical one needs height
+    hdr.classList.add('vexp');   // try the expanded controls (open color picker, vertical slider) and measure
+    collapse=hdr.scrollHeight>hdr.clientHeight+1;
+    if(collapse)hdr.classList.remove('vexp');
+  }else collapse=$('width').getBoundingClientRect().width<MIN_INLINE_WIDTH;
   hdr.classList.toggle('wpop',collapse);
   if(!collapse)closeWidthPop();
   else if(!widthPop.hidden)openWidthPop();   // keep an open popup inside the screen
