@@ -153,6 +153,7 @@ this program (see the LICENSE file). If not, see <https://www.gnu.org/licenses/>
   <div id="spot" hidden role="group"><canvas id="spotCv"></canvas><div class="sp-col"><button id="spMove" type="button" class="spb"></button><button id="spCol" type="button" class="spb"></button><button id="spClose" type="button" class="spb"></button></div></div>
   <div id="hint"><span data-i18n="hint.start"></span><span data-i18n="hint.nav"></span></div>
   <div id="msg"></div>
+  <div id="busy" hidden role="alertdialog" aria-live="polite" aria-labelledby="busyText"><div class="busy-box"><div class="spinner" aria-hidden="true"></div><p id="busyText"></p><button id="busyCancel" type="button" data-i18n="common.cancel"></button></div></div>
   <div id="dim" data-i18n-aria-label="app.imageSizeLabel"></div>
   <div id="ver" data-i18n-aria-label="app.versionLabel"></div>
 </div>
@@ -215,7 +216,7 @@ this program (see the LICENSE file). If not, see <https://www.gnu.org/licenses/>
 <dialog id="charDlg" aria-labelledby="charTitle">
   <h2 id="charTitle" tabindex="-1" data-i18n="chardlg.title"></h2>
   <label class="dlg-label" for="charInput" data-i18n="chardlg.label"></label>
-  <input id="charInput" type="text" maxlength="4" spellcheck="false" autocomplete="off" autocapitalize="off">
+  <input id="charInput" type="text" maxlength="4" spellcheck="false" autocomplete="off" autocapitalize="characters">
   <p id="charErr" class="dlg-err" hidden></p>
   <div class="dlg-actions"><button id="charCancel" type="button" data-i18n="common.cancel"></button><button id="charOk" type="button" class="primary" data-i18n="chardlg.ok"></button></div>
 </dialog>
