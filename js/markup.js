@@ -70,7 +70,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v34';   // keep in step with CACHE in sw.js
+const APP_VERSION='v35';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -592,7 +592,7 @@ cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&eraserPt&&!pt
 cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
 // Murdoku mode: indices of the live stencils that the newly placed stencil o deletes.
 // - X mark: every other stencil (not an X mark) whose bounding box overlaps its own.
-// - Text 1 (letter stencil without lt:2): every Text 2 (lt:2) whose box overlaps its own, and every Text 2 with the same character anywhere.
+// - Text 1 (letter stencil without lt:2): every other stencil (of any kind, X marks and other Text 1 included) whose box overlaps its own, and every Text 2 (lt:2) with the same character anywhere.
 // Text 2 stencils are letter stencils saved with lt:2 (Text 1 ones have no lt, so older files read as Text 1).
 function murdokuHits(o){
   const isX=o.k==='x',isT1=o.k==='char'&&o.lt!==2;
@@ -602,7 +602,7 @@ function murdokuHits(o){
     if(q.t!=='stencil'||dead.has(i))return;
     const r=(q.w+o.w)/2,overlap=Math.abs(q.cx-o.cx)<r&&Math.abs(q.cy-o.cy)<r;
     if(isX){if(q.k!=='x'&&overlap)hits.push(i)}
-    else if(q.k==='char'&&q.lt===2&&(overlap||q.ch===o.ch))hits.push(i);
+    else if(overlap||(q.k==='char'&&q.lt===2&&q.ch===o.ch))hits.push(i);
   });
   return hits;
 }
