@@ -112,6 +112,8 @@
   "scaledlg.err": "Inserisci una larghezza e un'altezza tra {min} e {max} px.",
   "scaledlg.same": "La dimensione non è cambiata.",
   "scaledlg.needClear": "Lo sfondo può essere ridimensionato solo se non ci sono segni di disegno.\n\nPrima cancella il disegno (il pulsante Cancella rimuove il disegno e mantiene lo sfondo e i suoi passaggi di ridimensionamento e ritaglio), poi riprova.",
+  "busy.scaling": "Ridimensionamento dello sfondo…",
+  "busy.failed": "Impossibile ridimensionare lo sfondo.",
   "msg.scaled": "Sfondo ridimensionato a {w} × {h} px.",
   "menu.settings": "Impostazioni",
   "menu.reload": "Ricarica applicazione",

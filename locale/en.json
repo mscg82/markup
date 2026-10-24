@@ -112,6 +112,8 @@
   "scaledlg.err": "Enter a width and a height between {min} and {max} px.",
   "scaledlg.same": "The size is unchanged.",
   "scaledlg.needClear": "The background can only be resized when there are no drawing marks.\n\nClear the drawing first (the Clear button removes the drawing and keeps the background and its resize and crop steps), then try again.",
+  "busy.scaling": "Resizing the background…",
+  "busy.failed": "Could not resize the background.",
   "msg.scaled": "Background resized to {w} × {h} px.",
   "menu.settings": "Settings",
   "menu.reload": "Reload application",

@@ -255,8 +255,9 @@ function cropBg(b,o){   // keep only the box x,y,w,h (clamped to the image, so a
 }
 // Bicubic resampling (Keys kernel, a = -0.5, the same as Pillow's BICUBIC): two separable passes. When the image is
 // reduced the kernel is stretched by the scale factor, so shrinking is smooth instead of aliased.
-const lanczos=x=>{x=Math.abs(x);if(x<1e-8)return 1;if(x>=3)return 0;const px=Math.PI*x;return 3*Math.sin(px)*Math.sin(px/3)/(px*px)};
-const cubic=x=>{x=Math.abs(x);return x<1?(1.5*x-2.5)*x*x+1:x<2?((-0.5*x+2.5)*x-4)*x+2:0};
+// The resampling functions are plain declarations without outside dependencies: they also run in a Web Worker, which is built from their source.
+function lanczos(x){x=Math.abs(x);if(x<1e-8)return 1;if(x>=3)return 0;const px=Math.PI*x;return 3*Math.sin(px)*Math.sin(px/3)/(px*px)}
+function cubic(x){x=Math.abs(x);return x<1?(1.5*x-2.5)*x*x+1:x<2?((-0.5*x+2.5)*x-4)*x+2:0}
 function cubicWeights(srcN,dstN,lz){
   const kern=lz?lanczos:cubic,sc=srcN/dstN,fs=Math.max(1,sc),support=(lz?3:2)*fs,out=new Array(dstN);
   for(let i=0;i<dstN;i++){
@@ -268,8 +269,7 @@ function cubicWeights(srcN,dstN,lz){
   }
   return out;
 }
-function resampleCanvas(src,dw,dh,sharp){   // sharp: 0 = bicubic as before, 1/2 = Lanczos-3 + limited sharpening (normal / strong)
-  const sw=src.width,sh=src.height,sd=src.getContext('2d').getImageData(0,0,sw,sh).data;
+function resamplePixels(sd,sw,sh,dw,dh,sharp){   // RGBA pixels in, RGBA pixels out. sharp: 0 = bicubic, 1/2 = Lanczos-3 + limited sharpening (normal / strong)
   const tmp=new Uint8ClampedArray(dw*sh*4),wx=cubicWeights(sw,dw,sharp>0),wy=cubicWeights(sh,dh,sharp>0);
   for(let y=0;y<sh;y++){                       // horizontal pass
     const row=y*sw*4;
@@ -279,8 +279,7 @@ function resampleCanvas(src,dw,dh,sharp){   // sharp: 0 = bicubic as before, 1/2
       const o=(y*dw+i)*4;tmp[o]=r;tmp[o+1]=g;tmp[o+2]=b;tmp[o+3]=a;
     }
   }
-  const out=document.createElement('canvas');out.width=dw;out.height=dh;
-  const oc=out.getContext('2d'),img=oc.createImageData(dw,dh),od=img.data;
+  const od=new Uint8ClampedArray(dw*dh*4);
   for(let j=0;j<dh;j++){                       // vertical pass
     const {x0,w}=wy[j];
     for(let i=0;i<dw;i++){
@@ -290,8 +289,39 @@ function resampleCanvas(src,dw,dh,sharp){   // sharp: 0 = bicubic as before, 1/2
     }
   }
   if(sharp>0){const f=Math.max(sw/dw,sh/dh),amt=(sharp===2?1:0.6)*Math.min(1,(f-1)*2);if(amt>0)unsharp(od,dw,dh,amt)}   // only when reducing
-  oc.putImageData(img,0,0);
-  return out;
+  return od;
+}
+function pixelsToCanvas(px,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').putImageData(new ImageData(px,w,h),0,0);return c}
+function resampleCanvas(src,dw,dh,sharp){   // synchronous version, used when a history is replayed
+  const sw=src.width,sh=src.height;
+  return pixelsToCanvas(resamplePixels(src.getContext('2d').getImageData(0,0,sw,sh).data,sw,sh,dw,dh,sharp),dw,dh);
+}
+// The same work in a Web Worker, so the page stays responsive (and can show a spinner) while a large image is resampled.
+// It returns a promise of the resampled canvas and a cancel function; the result is put in scaleCache, so the
+// resize operation applied right afterwards finds it ready. Without Worker support (or if it fails) it falls back to the synchronous version.
+let scaleJob=null;
+function resampleAsync(src,dw,dh,sharp){
+  let worker=null,done=false,reject;
+  const p=new Promise((res,rej)=>{
+    reject=rej;
+    const sw=src.width,sh=src.height;
+    let sd;
+    try{
+      sd=src.getContext('2d').getImageData(0,0,sw,sh).data;
+      const code=[lanczos,cubic,cubicWeights,unsharp,resamplePixels].map(f=>f.toString()).join('\n')+
+        "\nonmessage=e=>{const m=e.data,o=resamplePixels(new Uint8ClampedArray(m.buf),m.sw,m.sh,m.dw,m.dh,m.sharp);postMessage(o.buffer,[o.buffer])};";
+      const url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
+      worker=new Worker(url);URL.revokeObjectURL(url);
+      worker.onmessage=e=>{done=true;worker.terminate();res(pixelsToCanvas(new Uint8ClampedArray(e.data),dw,dh))};
+      worker.onerror=ev=>{ev.preventDefault();worker.terminate();worker=null;   // the worker could not run: do the work here, after letting the spinner paint
+        setTimeout(()=>{try{done=true;res(resampleCanvas(src,dw,dh,sharp))}catch(x){rej(x)}},50)};
+      const buf=new Uint8ClampedArray(sd).buffer;   // a copy that can be transferred
+      worker.postMessage({buf,sw,sh,dw,dh,sharp},[buf]);
+    }catch(x){
+      setTimeout(()=>{try{done=true;res(resampleCanvas(src,dw,dh,sharp))}catch(y){rej(y)}},50);
+    }
+  });
+  return {promise:p,cancel(){if(done)return;done=true;if(worker)worker.terminate();worker=null;reject('cancelled')}};
 }
 // Unsharp mask (Gaussian sigma ~0.7 px) whose result is clamped to the min/max of each pixel's 3x3 neighbourhood, so it
 // restores edge contrast (text) without halos or ringing. Alpha is left alone.
@@ -1410,9 +1440,24 @@ function applyScaleDialog(){
   const o={t:'scale',w:v[0],h:v[1],s:(+$('scSharp').value)};
   lastSharp=o.s;savePrefs();
   scaleDlg.close();
-  ops.push(o);redoStack=[];applyResizeOp(o);syncBgCache();persist();ui();fit();
-  msg(t('msg.scaled',{w:o.w,h:o.h}));
+  const finish=()=>{ops.push(o);redoStack=[];applyResizeOp(o);syncBgCache();persist();ui();fit();msg(t('msg.scaled',{w:o.w,h:o.h}))};
+  const src=bg,job=resampleAsync(src,o.w,o.h,o.s|0);
+  scaleJob=job;showBusy(t('busy.scaling'),()=>job.cancel());
+  job.promise.then(c=>{
+    if(scaleJob!==job)return;scaleJob=null;hideBusy();
+    scaleCache={src,w:o.w,h:o.h,s:o.s|0,c};
+    finish();
+  },err=>{
+    if(scaleJob===job)scaleJob=null;hideBusy();
+    if(err!=='cancelled'){$('scaleErr').hidden=true;alert(t('busy.failed'))}
+  });
 }
+// Busy overlay: a spinner and a Cancel button, covering the whole page so nothing can change the history meanwhile.
+let busyCancel=null;
+function showBusy(text,cancel){$('busyText').textContent=text;busyCancel=cancel;$('busy').hidden=false;$('busyCancel').focus({preventScroll:true})}
+function hideBusy(){busyCancel=null;$('busy').hidden=true}
+$('busyCancel').onclick=()=>{const c=busyCancel;hideBusy();scaleJob=null;if(c)c()};
+$('busy').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();$('busyCancel').click()}});
 $('scW').addEventListener('input',()=>{
   $('scaleErr').hidden=true;
   const w=parseInt($('scW').value,10);
