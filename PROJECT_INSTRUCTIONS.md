@@ -14,7 +14,7 @@ index.html (markup), css/style.css, js/markup.js (app logic), js/colorpicker.js 
 - Clear button: click = clear drawing (keeps the resize/frame/crop ops in the history, only non-resize ops are removed), long press (700 ms) = also remove background; both use confirm() and are not undoable.
 - Export: merge background + layer at full resolution to JPEG.
 - localStorage keys: markup.bg (JPEG data URL), markup.ops (operations JSON), markup.prefs (color, draw width, erase width). Always wrap storage access in try/catch and warn the user if saving fails.
-- Offline: sw.js uses stale-while-revalidate. When a cached file is added, add it to ASSETS. Version rule: CACHE in sw.js (currently markup-v35) and APP_VERSION in js/markup.js (shown in the app's bottom-right corner) always change together, and only (1) in the first code change after the owner announces that a new development cycle has begun, or (2) when the owner explicitly asks for a bump. Never bump them at any other time.
+- Offline: sw.js uses stale-while-revalidate. When a cached file is added, add it to ASSETS. Version rule: CACHE in sw.js (currently markup-v36) and APP_VERSION in js/markup.js (shown in the app's bottom-right corner) always change together, and only (1) in the first code change after the owner announces that a new development cycle has begun, or (2) when the owner explicitly asks for a bump. Never bump them at any other time.
 - Icons: Firefox Android ignores SVG for shortcuts, so keep raster icons and favicon.ico declared before the SVG in <head>.
 
 ## Working style
@@ -49,3 +49,9 @@ fill option for shapes, remembering the selected tool, text tool, offline update
 - Murdoku mode, Letter 1 (v35): murdokuHits() for a Letter 1 now returns every live stencil of any kind whose box overlaps the new one (X marks and other Letter 1 included), plus every live Letter 2 with the same `ch` anywhere. The X mark rule is unchanged.
 
 - Resize background (v35): the resampling is plain functions (lanczos, cubic, cubicWeights, unsharp, resamplePixels) so resampleAsync() can build a Web Worker from their toString(). applyScaleDialog() shows the #busy overlay (spinner + Cancel), runs the worker, stores the result in scaleCache and then applies the op, which finds it cached. Without Worker support it falls back to the synchronous resampleCanvas(). Replaying a history that contains a scale op (undo past it, import, reload) is still synchronous.
+
+- Paste image (v36): the #file change handler and the window 'paste' listener both call openImageFile(f) (confirm.openImage warning, or confirm.pasteImage for a paste, when there is work, then setBackground etc.). The paste listener ignores events while a dialog is open or the #busy overlay is shown, and only reacts to clipboard items of kind file with an image/* type.
+
+- Copy / Paste (v36): menu items #miCopy (disabled without an image) and #miPaste, below New. copyImage() writes mergedCanvas() with navigator.clipboard.write, JPEG first and PNG as the fallback (Chrome only takes PNG); Ctrl/Cmd+C in the keydown handler calls it (not in dialogs, text inputs or with a text selection). pasteImage() uses navigator.clipboard.read() and openImageFile(blob,true); Ctrl/Cmd+V is handled by the window 'paste' event instead.
+
+- Alert / confirm boxes (v36): never use the browser's confirm() or alert(). Use `await askConfirm(text)` (true = Continue) and `showAlert(text)` (OK only), which show the #msgDlg modal <dialog> (its ::backdrop is the semitransparent layer blocking the page, even over another dialog; Escape cancels; Continue is focused so Enter confirms). Calls are queued, so the functions that ask are async (clearWork, openImageFile, createEmptyImage, restoreSnapshot, deleteSnapshot, closeSpot, the import reader).

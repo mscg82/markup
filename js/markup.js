@@ -70,7 +70,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v35';   // keep in step with CACHE in sw.js
+const APP_VERSION='v36';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -122,6 +122,23 @@ function saveSettings(){
 }
 
 
+// Application alert / confirm boxes instead of the browser's: a modal <dialog> (its backdrop is a semitransparent layer over the whole
+// page, so clicks cannot reach what is below, even another dialog, and Escape cancels). askConfirm() resolves true / false, showAlert() when closed.
+let boxQueue=Promise.resolve();
+function openBox(text,confirmBox){
+  const run=()=>new Promise(res=>{
+    const d=$('msgDlg'),ok=$('msgOk'),no=$('msgCancel');
+    $('msgText').textContent=text;ok.textContent=t(confirmBox?'common.continue':'common.ok');no.hidden=!confirmBox;
+    let result=false;
+    const done=v=>{result=v;if(d.open)d.close()};
+    ok.onclick=()=>done(true);no.onclick=()=>done(false);
+    d.oncancel=e=>{e.preventDefault();done(false)};   // Escape
+    d.onclose=()=>{d.onclose=null;res(confirmBox?result:true)};
+    d.showModal();ok.focus({preventScroll:true});
+  });
+  return boxQueue=boxQueue.then(run,run);
+}
+const askConfirm=text=>openBox(text,true),showAlert=text=>openBox(text,false);
 function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(()=>m.style.display='none',3500)}
 
 /* ---------- drawing primitives ---------- */
@@ -779,7 +796,7 @@ cv.addEventListener('wheel',e=>{
 /* ---------- UI ---------- */
 function ui(){
   showSize();
-  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miResize').disabled=!bg;$('miSpot').disabled=!bg||!!spot;$('miExport').disabled=!bg;$('miSnapNew').disabled=!bg;$('clear').disabled=!bg;
+  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miCopy').disabled=!bg;$('miResize').disabled=!bg;$('miSpot').disabled=!bg||!!spot;$('miExport').disabled=!bg;$('miSnapNew').disabled=!bg;$('clear').disabled=!bg;
   $('hint').style.display=bg?'none':'flex';
 }
 // The last drawing tool used before the eraser (not Move, not the eraser itself). Choosing a color while the
@@ -871,9 +888,9 @@ for(const el of[$('wv'),$('wvPop')]){
   });
 }
 $('widthL').oninput=e=>setWidth((+e.target.value));
-function clearWork(all){
+async function clearWork(all){
   if(!all&&!pending&&ops.every(isResizeOp)){msg(t('msg.nothingToClear'));return}   // resize/crop steps are not drawings
-  if(!confirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
+  if(!await askConfirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
   cur=null;ops=all?[]:ops.filter(isResizeOp);redoStack=[];discardPending();resetNames();resetSnapshots();   // clearing the drawing keeps the resize / crop steps in the history
   if(all){
     bg=bg0=L=lc=null;
@@ -925,6 +942,7 @@ addEventListener('keydown',e=>{
     const k=e.key.toLowerCase();
     if(k==='z'&&!e.shiftKey){e.preventDefault();$('undo').click();return}
     if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();$('redo').click();return}
+    if(k==='c'&&!e.shiftKey&&!e.altKey&&!String(getSelection())&&bg){e.preventDefault();copyImage();return}   // Ctrl+V is the 'paste' event
   }
   if(e.code==='Space'&&e.target.tagName!=='BUTTON'&&e.target.tagName!=='INPUT'){e.preventDefault();spaceDown=true;setCursor()}
   const k={ArrowLeft:[60,0],ArrowRight:[-60,0],ArrowUp:[0,60],ArrowDown:[0,-60]}[e.key];
@@ -941,14 +959,26 @@ function setBackground(img){
   const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
   crop=null;dropSpot();bg=bg0=c;newLayer(c.width,c.height);showSize();
 }
-$('file').onchange=e=>{
-  const f=e.target.files[0];e.target.value='';if(!f)return;
-  if((ops.length||pending)&&!confirm(t('confirm.openImage')))return;
+$('file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)openImageFile(f)};
+// Ctrl+V / Cmd+V with an image on the system clipboard: the same as Open image (same warning, same result).
+addEventListener('paste',e=>{
+  if(document.querySelector('dialog[open]')||!$('busy').hidden)return;   // dialogs and the busy overlay handle their own input
+  const items=e.clipboardData&&e.clipboardData.items;if(!items)return;
+  for(const it of items){
+    if(it.kind==='file'&&/^image\//.test(it.type)){
+      const f=it.getAsFile();
+      if(f){e.preventDefault();openImageFile(f,true)}
+      return;
+    }
+  }
+});
+async function openImageFile(f,pasted){
+  if((ops.length||pending)&&!await askConfirm(t(pasted?'confirm.pasteImage':'confirm.openImage')))return;
   const url=URL.createObjectURL(f),img=new Image();
   img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];discardPending();resetNames();resetSnapshots();persist(true);ui();fit()};
   img.onerror=()=>msg(t('msg.badImage'));
   img.src=url;
-};
+}
 
 /* ---------- local storage ---------- */
 function persist(withBg){
@@ -976,9 +1006,36 @@ function download(blob,name){
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
 function saveJpeg(name){
+  mergedCanvas().toBlob(b=>download(b,name),'image/jpeg',.92);
+}
+// Copy: the merged image goes to the system clipboard. The async clipboard API of most browsers only takes PNG for images,
+// so JPEG is tried first and PNG is the fallback.
+function mergedCanvas(){
   const c=document.createElement('canvas');c.width=bg.width;c.height=bg.height;
   const x=c.getContext('2d');x.drawImage(bg,0,0);x.drawImage(L,0,0);
-  c.toBlob(b=>download(b,name),'image/jpeg',.92);
+  return c;
+}
+async function copyImage(){
+  if(!bg)return;
+  commitPending();
+  if(!(navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem)){msg(t('msg.copyFailed'));return}
+  const c=mergedCanvas(),blobOf=type=>new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('toBlob')),type,.92));
+  try{
+    try{await navigator.clipboard.write([new ClipboardItem({'image/jpeg':blobOf('image/jpeg')})])}
+    catch(e){await navigator.clipboard.write([new ClipboardItem({'image/png':blobOf('image/png')})])}
+    msg(t('msg.copied'));
+  }catch(e){msg(t('msg.copyFailed'))}
+}
+// Paste from the menu: reads the clipboard (the browser may ask permission). Ctrl+V / Cmd+V use the paste event instead.
+async function pasteImage(){
+  if(!(navigator.clipboard&&navigator.clipboard.read)){msg(t('msg.pasteFailed'));return}
+  try{
+    for(const it of await navigator.clipboard.read()){
+      const type=it.types.find(x=>/^image\//.test(x));
+      if(type){openImageFile(await it.getType(type),true);return}
+    }
+    msg(t('msg.pasteEmpty'));
+  }catch(e){msg(t('msg.pasteFailed'))}
 }
 function buildStatus(){   // the application status; shared by Export status and Snapshots
   return{
@@ -1028,11 +1085,11 @@ function restoreStatus(st,okMsg){
 function importStatus(file){
   const fr=new FileReader();
   fr.onerror=()=>msg(t('msg.fileRead'));
-  fr.onload=()=>{
+  fr.onload=async()=>{
     let st;
     try{st=JSON.parse(fr.result)}catch(e){msg(t('msg.badJson'));return}
     if(!validStatus(st)){msg(t('msg.badStatus'));return}
-    if(bg&&!confirm(t('confirm.import')))return;
+    if(bg&&!await askConfirm(t('confirm.import')))return;
     restoreStatus(st,t('msg.imported'));
   };
   fr.readAsText(file);
@@ -1096,7 +1153,7 @@ $('snapCancel').onclick=()=>snapDlg.close();
 $('snapInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(!$('snapOk').disabled)confirmSnapshot()}});
 async function restoreSnapshot(id){
   const s=snaps.find(x=>x.id===id);if(!s)return;
-  if(!confirm(t('confirm.snapRestore',{name:s.name})))return;
+  if(!await askConfirm(t('confirm.snapRestore',{name:s.name})))return;
   try{
     const d=await unpackSnapshot(s);
     if(!bg0||!d||!Array.isArray(d.operations)||!d.operations.every(validOp))throw new Error('bad snapshot');
@@ -1110,9 +1167,9 @@ async function restoreSnapshot(id){
     syncWidth();syncColor();savePrefs();persist();ui();fit();showSize();msg(t('msg.snapRestored',{name:s.name}));
   }catch(e){msg(t('msg.badStatus'))}
 }
-function deleteSnapshot(id){
+async function deleteSnapshot(id){
   const s=snaps.find(x=>x.id===id);if(!s)return;
-  if(!confirm(t('confirm.snapDelete',{name:s.name})))return;
+  if(!await askConfirm(t('confirm.snapDelete',{name:s.name})))return;
   snaps=snaps.filter(x=>x!==s);saveSnaps();renderSnaps();
 }
 
@@ -1199,6 +1256,8 @@ function deleteSnapshot(id){
   $('miScale').onclick=()=>{close();openScaleDialog()};
   $('miCrop').onclick=()=>{close();openCrop()};
   $('miSpot').onclick=()=>{close();openSpot()};
+  $('miCopy').onclick=()=>{close();copyImage()};
+  $('miPaste').onclick=()=>{close();pasteImage()};
   $('miOpen').onclick=()=>{close();$('file').click()};
   $('miEmpty').onclick=()=>{close();openNewDialog()};
   $('miSnapNew').onclick=()=>{close();commitPending();openSnapDialog()};
@@ -1401,12 +1460,12 @@ function openNewDialog(){
   // Don't let the browser focus the first text field: on phones that opens the on-screen keyboard.
   $('newTitle').focus({preventScroll:true});
 }
-function createEmptyImage(){
+async function createEmptyImage(){
   const w=parseInt($('newW').value,10),h=parseInt($('newH').value,10);
   if(!(w>=16&&w<=MAXDIM&&h>=16&&h<=MAXDIM)){
     const e=$('newErr');e.textContent=t('newdlg.error',{min:16,max:MAXDIM});e.hidden=false;return;
   }
-  if((ops.length||pending)&&!confirm(t('confirm.newImage')))return;
+  if((ops.length||pending)&&!await askConfirm(t('confirm.newImage')))return;
   const c=document.createElement('canvas');c.width=w;c.height=h;
   const x=c.getContext('2d');x.fillStyle=$('newColor').value;x.fillRect(0,0,w,h);
   setBackground(c);cur=null;ops=[];redoStack=[];discardPending();resetNames();resetSnapshots();persist(true);ui();fit();newDlg.close();
@@ -1426,7 +1485,7 @@ function scaleValues(){
 }
 function openScaleDialog(){
   if(!bg)return;
-  if(ops.some(o=>!isResizeOp(o))||pending){alert(t('scaledlg.needClear'));return}   // only resize operations may precede it
+  if(ops.some(o=>!isResizeOp(o))||pending){showAlert(t('scaledlg.needClear'));return}   // only resize operations may precede it
   scaleRatio=bg.width/bg.height;
   $('scW').value=bg.width;$('scH').value=bg.height;$('scKeep').checked=true;$('scSharp').value=String(lastSharp);$('scaleErr').hidden=true;
   $('scaleCur').textContent=t('scaledlg.current',{w:bg.width,h:bg.height});
@@ -1449,7 +1508,7 @@ function applyScaleDialog(){
     finish();
   },err=>{
     if(scaleJob===job)scaleJob=null;hideBusy();
-    if(err!=='cancelled'){$('scaleErr').hidden=true;alert(t('busy.failed'))}
+    if(err!=='cancelled'){$('scaleErr').hidden=true;showAlert(t('busy.failed'))}
   });
 }
 // Busy overlay: a spinner and a Cancel button, covering the whole page so nothing can change the history meanwhile.
@@ -1523,7 +1582,7 @@ newDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='IN
 const cropA=$('cropA'),cropB=$('cropB'),cropOk=$('cropOk'),cropNo=$('cropNo');
 function openCrop(){
   if(!bg)return;
-  if(ops.some(o=>!isResizeOp(o))||pending){alert(t('crop.needClear'));return}
+  if(ops.some(o=>!isResizeOp(o))||pending){showAlert(t('crop.needClear'));return}
   startSelect('crop');
 }
 function startSelect(kind){   // the same rectangle selector serves the crop and the spotlight
@@ -1652,9 +1711,10 @@ function createSpot(x,y,w,h){
   setSpotPos((W-spotBox.offsetWidth)/2,(H-spotBox.offsetHeight)/2);
   drawSpot();ui();render();
 }
-function closeSpot(){
+async function closeSpot(){
   if(!spot)return;
-  if(!confirm(t('spot.confirmClose')))return;
+  if(!await askConfirm(t('spot.confirmClose')))return;
+  if(!spot)return;
   dropSpot();
 }
 function dropSpot(){   // removes the spotlight without asking (used when the image it watches goes away)
