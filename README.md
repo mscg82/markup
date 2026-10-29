@@ -125,3 +125,5 @@ Developed for Chrome (desktop and Android). It uses standard APIs (canvas, point
 ## License
 
 Markup is free software, released under the **GNU General Public License, version 3 or (at your option) any later version** (GPL-3.0-or-later). The full text is in the [LICENSE](LICENSE) file, and each source file carries a short notice (copyright Giuseppe Miscione) with an SPDX identifier. You may use, study, share and modify it under those terms; if you distribute a modified version (including by hosting it for others), you must make its source available under the same license. There is no warranty.
+
+- **Confirmation and warning boxes:** the application shows its own boxes instead of the browser's: a semitransparent layer covers the whole page (clicks do not reach what is below, not even another dialog) and the box is centred over it. Questions have *Cancel* and *Continue* (Escape = Cancel, Enter = Continue); warnings have only *OK*.

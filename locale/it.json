@@ -59,6 +59,8 @@
   "zoom.fit.title": "Adatta l'immagine allo schermo",
   "hint.start": "Apri un'immagine, oppure creane una vuota dal menu (☰ → Nuovo), per iniziare a disegnare.",
   "hint.nav": "Pizzica o scorri per fare zoom. Trascina con Sposta, con due dita, con la barra spaziatrice o con il pulsante destro del mouse.",
+  "common.ok": "OK",
+  "common.continue": "Continua",
   "common.cancel": "Annulla",
   "newdlg.title": "Nuova immagine vuota",
   "newdlg.width": "Larghezza (px)",

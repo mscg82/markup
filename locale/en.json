@@ -59,6 +59,8 @@
   "zoom.fit.title": "Fit image to screen",
   "hint.start": "Open an image, or create an empty one from the menu (☰ → New), to start drawing.",
   "hint.nav": "Pinch or scroll to zoom. Drag with Move, two fingers, Space, or the right mouse button.",
+  "common.ok": "OK",
+  "common.continue": "Continue",
   "common.cancel": "Cancel",
   "newdlg.title": "New empty image",
   "newdlg.width": "Width (px)",

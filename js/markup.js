@@ -122,6 +122,23 @@ function saveSettings(){
 }
 
 
+// Application alert / confirm boxes instead of the browser's: a modal <dialog> (its backdrop is a semitransparent layer over the whole
+// page, so clicks cannot reach what is below, even another dialog, and Escape cancels). askConfirm() resolves true / false, showAlert() when closed.
+let boxQueue=Promise.resolve();
+function openBox(text,confirmBox){
+  const run=()=>new Promise(res=>{
+    const d=$('msgDlg'),ok=$('msgOk'),no=$('msgCancel');
+    $('msgText').textContent=text;ok.textContent=t(confirmBox?'common.continue':'common.ok');no.hidden=!confirmBox;
+    let result=false;
+    const done=v=>{result=v;if(d.open)d.close()};
+    ok.onclick=()=>done(true);no.onclick=()=>done(false);
+    d.oncancel=e=>{e.preventDefault();done(false)};   // Escape
+    d.onclose=()=>{d.onclose=null;res(confirmBox?result:true)};
+    d.showModal();ok.focus({preventScroll:true});
+  });
+  return boxQueue=boxQueue.then(run,run);
+}
+const askConfirm=text=>openBox(text,true),showAlert=text=>openBox(text,false);
 function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(()=>m.style.display='none',3500)}
 
 /* ---------- drawing primitives ---------- */
@@ -871,9 +888,9 @@ for(const el of[$('wv'),$('wvPop')]){
   });
 }
 $('widthL').oninput=e=>setWidth((+e.target.value));
-function clearWork(all){
+async function clearWork(all){
   if(!all&&!pending&&ops.every(isResizeOp)){msg(t('msg.nothingToClear'));return}   // resize/crop steps are not drawings
-  if(!confirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
+  if(!await askConfirm(t(all?'confirm.clearAll':'confirm.clearDrawing')))return;
   cur=null;ops=all?[]:ops.filter(isResizeOp);redoStack=[];discardPending();resetNames();resetSnapshots();   // clearing the drawing keeps the resize / crop steps in the history
   if(all){
     bg=bg0=L=lc=null;
@@ -955,8 +972,8 @@ addEventListener('paste',e=>{
     }
   }
 });
-function openImageFile(f,pasted){
-  if((ops.length||pending)&&!confirm(t(pasted?'confirm.pasteImage':'confirm.openImage')))return;
+async function openImageFile(f,pasted){
+  if((ops.length||pending)&&!await askConfirm(t(pasted?'confirm.pasteImage':'confirm.openImage')))return;
   const url=URL.createObjectURL(f),img=new Image();
   img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];discardPending();resetNames();resetSnapshots();persist(true);ui();fit()};
   img.onerror=()=>msg(t('msg.badImage'));
@@ -1068,11 +1085,11 @@ function restoreStatus(st,okMsg){
 function importStatus(file){
   const fr=new FileReader();
   fr.onerror=()=>msg(t('msg.fileRead'));
-  fr.onload=()=>{
+  fr.onload=async()=>{
     let st;
     try{st=JSON.parse(fr.result)}catch(e){msg(t('msg.badJson'));return}
     if(!validStatus(st)){msg(t('msg.badStatus'));return}
-    if(bg&&!confirm(t('confirm.import')))return;
+    if(bg&&!await askConfirm(t('confirm.import')))return;
     restoreStatus(st,t('msg.imported'));
   };
   fr.readAsText(file);
@@ -1136,7 +1153,7 @@ $('snapCancel').onclick=()=>snapDlg.close();
 $('snapInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(!$('snapOk').disabled)confirmSnapshot()}});
 async function restoreSnapshot(id){
   const s=snaps.find(x=>x.id===id);if(!s)return;
-  if(!confirm(t('confirm.snapRestore',{name:s.name})))return;
+  if(!await askConfirm(t('confirm.snapRestore',{name:s.name})))return;
   try{
     const d=await unpackSnapshot(s);
     if(!bg0||!d||!Array.isArray(d.operations)||!d.operations.every(validOp))throw new Error('bad snapshot');
@@ -1150,9 +1167,9 @@ async function restoreSnapshot(id){
     syncWidth();syncColor();savePrefs();persist();ui();fit();showSize();msg(t('msg.snapRestored',{name:s.name}));
   }catch(e){msg(t('msg.badStatus'))}
 }
-function deleteSnapshot(id){
+async function deleteSnapshot(id){
   const s=snaps.find(x=>x.id===id);if(!s)return;
-  if(!confirm(t('confirm.snapDelete',{name:s.name})))return;
+  if(!await askConfirm(t('confirm.snapDelete',{name:s.name})))return;
   snaps=snaps.filter(x=>x!==s);saveSnaps();renderSnaps();
 }
 
@@ -1443,12 +1460,12 @@ function openNewDialog(){
   // Don't let the browser focus the first text field: on phones that opens the on-screen keyboard.
   $('newTitle').focus({preventScroll:true});
 }
-function createEmptyImage(){
+async function createEmptyImage(){
   const w=parseInt($('newW').value,10),h=parseInt($('newH').value,10);
   if(!(w>=16&&w<=MAXDIM&&h>=16&&h<=MAXDIM)){
     const e=$('newErr');e.textContent=t('newdlg.error',{min:16,max:MAXDIM});e.hidden=false;return;
   }
-  if((ops.length||pending)&&!confirm(t('confirm.newImage')))return;
+  if((ops.length||pending)&&!await askConfirm(t('confirm.newImage')))return;
   const c=document.createElement('canvas');c.width=w;c.height=h;
   const x=c.getContext('2d');x.fillStyle=$('newColor').value;x.fillRect(0,0,w,h);
   setBackground(c);cur=null;ops=[];redoStack=[];discardPending();resetNames();resetSnapshots();persist(true);ui();fit();newDlg.close();
@@ -1468,7 +1485,7 @@ function scaleValues(){
 }
 function openScaleDialog(){
   if(!bg)return;
-  if(ops.some(o=>!isResizeOp(o))||pending){alert(t('scaledlg.needClear'));return}   // only resize operations may precede it
+  if(ops.some(o=>!isResizeOp(o))||pending){showAlert(t('scaledlg.needClear'));return}   // only resize operations may precede it
   scaleRatio=bg.width/bg.height;
   $('scW').value=bg.width;$('scH').value=bg.height;$('scKeep').checked=true;$('scSharp').value=String(lastSharp);$('scaleErr').hidden=true;
   $('scaleCur').textContent=t('scaledlg.current',{w:bg.width,h:bg.height});
@@ -1491,7 +1508,7 @@ function applyScaleDialog(){
     finish();
   },err=>{
     if(scaleJob===job)scaleJob=null;hideBusy();
-    if(err!=='cancelled'){$('scaleErr').hidden=true;alert(t('busy.failed'))}
+    if(err!=='cancelled'){$('scaleErr').hidden=true;showAlert(t('busy.failed'))}
   });
 }
 // Busy overlay: a spinner and a Cancel button, covering the whole page so nothing can change the history meanwhile.
@@ -1565,7 +1582,7 @@ newDlg.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='IN
 const cropA=$('cropA'),cropB=$('cropB'),cropOk=$('cropOk'),cropNo=$('cropNo');
 function openCrop(){
   if(!bg)return;
-  if(ops.some(o=>!isResizeOp(o))||pending){alert(t('crop.needClear'));return}
+  if(ops.some(o=>!isResizeOp(o))||pending){showAlert(t('crop.needClear'));return}
   startSelect('crop');
 }
 function startSelect(kind){   // the same rectangle selector serves the crop and the spotlight
@@ -1694,9 +1711,10 @@ function createSpot(x,y,w,h){
   setSpotPos((W-spotBox.offsetWidth)/2,(H-spotBox.offsetHeight)/2);
   drawSpot();ui();render();
 }
-function closeSpot(){
+async function closeSpot(){
   if(!spot)return;
-  if(!confirm(t('spot.confirmClose')))return;
+  if(!await askConfirm(t('spot.confirmClose')))return;
+  if(!spot)return;
   dropSpot();
 }
 function dropSpot(){   // removes the spotlight without asking (used when the image it watches goes away)
