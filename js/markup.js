@@ -70,7 +70,7 @@ function keepOnScreen(el){
   if(r.left+shift<m)shift=m-r.left;         // never past the left edge either
   el.style.left=shift+'px';
 }
-const APP_VERSION='v35';   // keep in step with CACHE in sw.js
+const APP_VERSION='v36';   // keep in step with CACHE in sw.js
 $('ver').textContent=t('app.version',{version:APP_VERSION});
 
 /* ---------- settings (persisted in localStorage) ---------- */
@@ -941,14 +941,26 @@ function setBackground(img){
   const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
   crop=null;dropSpot();bg=bg0=c;newLayer(c.width,c.height);showSize();
 }
-$('file').onchange=e=>{
-  const f=e.target.files[0];e.target.value='';if(!f)return;
-  if((ops.length||pending)&&!confirm(t('confirm.openImage')))return;
+$('file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)openImageFile(f)};
+// Ctrl+V / Cmd+V with an image on the system clipboard: the same as Open image (same warning, same result).
+addEventListener('paste',e=>{
+  if(document.querySelector('dialog[open]')||!$('busy').hidden)return;   // dialogs and the busy overlay handle their own input
+  const items=e.clipboardData&&e.clipboardData.items;if(!items)return;
+  for(const it of items){
+    if(it.kind==='file'&&/^image\//.test(it.type)){
+      const f=it.getAsFile();
+      if(f){e.preventDefault();openImageFile(f,true)}
+      return;
+    }
+  }
+});
+function openImageFile(f,pasted){
+  if((ops.length||pending)&&!confirm(t(pasted?'confirm.pasteImage':'confirm.openImage')))return;
   const url=URL.createObjectURL(f),img=new Image();
   img.onload=()=>{setBackground(img);URL.revokeObjectURL(url);ops=[];redoStack=[];discardPending();resetNames();resetSnapshots();persist(true);ui();fit()};
   img.onerror=()=>msg(t('msg.badImage'));
   img.src=url;
-};
+}
 
 /* ---------- local storage ---------- */
 function persist(withBg){

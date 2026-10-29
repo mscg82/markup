@@ -84,6 +84,7 @@
   "confirm.clearDrawing": "Clear everything you have drawn? The background image stays. This cannot be undone.",
   "confirm.clearAll": "Remove the drawing AND the background image? This cannot be undone.",
   "confirm.openImage": "Opening a new image discards the current drawing. Continue?",
+  "confirm.pasteImage": "Pasting an image discards the current drawing. Continue?",
   "confirm.newImage": "Creating a new image discards the current drawing. Continue?",
   "confirm.import": "Importing replaces the current image and drawing. Continue?",
   "menu.resize": "Resize",
