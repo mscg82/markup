@@ -779,7 +779,7 @@ cv.addEventListener('wheel',e=>{
 /* ---------- UI ---------- */
 function ui(){
   showSize();
-  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miResize').disabled=!bg;$('miSpot').disabled=!bg||!!spot;$('miExport').disabled=!bg;$('miSnapNew').disabled=!bg;$('clear').disabled=!bg;
+  $('undo').disabled=!ops.length&&!pending;$('redo').disabled=!redoStack.length;$('miJpeg').disabled=!bg;$('miCopy').disabled=!bg;$('miResize').disabled=!bg;$('miSpot').disabled=!bg||!!spot;$('miExport').disabled=!bg;$('miSnapNew').disabled=!bg;$('clear').disabled=!bg;
   $('hint').style.display=bg?'none':'flex';
 }
 // The last drawing tool used before the eraser (not Move, not the eraser itself). Choosing a color while the
@@ -925,6 +925,7 @@ addEventListener('keydown',e=>{
     const k=e.key.toLowerCase();
     if(k==='z'&&!e.shiftKey){e.preventDefault();$('undo').click();return}
     if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();$('redo').click();return}
+    if(k==='c'&&!e.shiftKey&&!e.altKey&&!String(getSelection())&&bg){e.preventDefault();copyImage();return}   // Ctrl+V is the 'paste' event
   }
   if(e.code==='Space'&&e.target.tagName!=='BUTTON'&&e.target.tagName!=='INPUT'){e.preventDefault();spaceDown=true;setCursor()}
   const k={ArrowLeft:[60,0],ArrowRight:[-60,0],ArrowUp:[0,60],ArrowDown:[0,-60]}[e.key];
@@ -988,9 +989,36 @@ function download(blob,name){
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
 function saveJpeg(name){
+  mergedCanvas().toBlob(b=>download(b,name),'image/jpeg',.92);
+}
+// Copy: the merged image goes to the system clipboard. The async clipboard API of most browsers only takes PNG for images,
+// so JPEG is tried first and PNG is the fallback.
+function mergedCanvas(){
   const c=document.createElement('canvas');c.width=bg.width;c.height=bg.height;
   const x=c.getContext('2d');x.drawImage(bg,0,0);x.drawImage(L,0,0);
-  c.toBlob(b=>download(b,name),'image/jpeg',.92);
+  return c;
+}
+async function copyImage(){
+  if(!bg)return;
+  commitPending();
+  if(!(navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem)){msg(t('msg.copyFailed'));return}
+  const c=mergedCanvas(),blobOf=type=>new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('toBlob')),type,.92));
+  try{
+    try{await navigator.clipboard.write([new ClipboardItem({'image/jpeg':blobOf('image/jpeg')})])}
+    catch(e){await navigator.clipboard.write([new ClipboardItem({'image/png':blobOf('image/png')})])}
+    msg(t('msg.copied'));
+  }catch(e){msg(t('msg.copyFailed'))}
+}
+// Paste from the menu: reads the clipboard (the browser may ask permission). Ctrl+V / Cmd+V use the paste event instead.
+async function pasteImage(){
+  if(!(navigator.clipboard&&navigator.clipboard.read)){msg(t('msg.pasteFailed'));return}
+  try{
+    for(const it of await navigator.clipboard.read()){
+      const type=it.types.find(x=>/^image\//.test(x));
+      if(type){openImageFile(await it.getType(type),true);return}
+    }
+    msg(t('msg.pasteEmpty'));
+  }catch(e){msg(t('msg.pasteFailed'))}
 }
 function buildStatus(){   // the application status; shared by Export status and Snapshots
   return{
@@ -1211,6 +1239,8 @@ function deleteSnapshot(id){
   $('miScale').onclick=()=>{close();openScaleDialog()};
   $('miCrop').onclick=()=>{close();openCrop()};
   $('miSpot').onclick=()=>{close();openSpot()};
+  $('miCopy').onclick=()=>{close();copyImage()};
+  $('miPaste').onclick=()=>{close();pasteImage()};
   $('miOpen').onclick=()=>{close();$('file').click()};
   $('miEmpty').onclick=()=>{close();openNewDialog()};
   $('miSnapNew').onclick=()=>{close();commitPending();openSnapDialog()};
